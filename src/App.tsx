@@ -1,122 +1,82 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useEffect, useState } from "react";
+import { ROUND_MS, formatRemaining, remainingMs } from "./timer";
+import "./App.css";
+
+/**
+ * How often the display re-reads the clock. This is a refresh rate, not the
+ * length of the round: the round's length is ROUND_MS, and this only decides how
+ * quickly the screen notices that time has passed.
+ */
+const TICK_MS = 250;
+
+type Phase = "idle" | "running" | "finished";
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [deadline, setDeadline] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (phase !== "running" || deadline === null) {
+      return;
+    }
+
+    // Every tick reads the clock again and re-derives what is left, instead of
+    // subtracting from a stored total. That is what makes the countdown
+    // self-correcting: a late, skipped or doubled tick cannot make the round run
+    // long, because the next tick starts from the truth again.
+    const tick = () => {
+      const currentTime = Date.now();
+      setNow(currentTime);
+
+      if (currentTime >= deadline) {
+        setPhase("finished");
+      }
+    };
+
+    const intervalId = setInterval(tick, TICK_MS);
+
+    // Clearing the loop here is what stops StrictMode's development double-mount
+    // (and unmounting mid-round, and Reset) from leaving a ticking loop behind.
+    return () => clearInterval(intervalId);
+  }, [phase, deadline]);
+
+  const startRound = () => {
+    const startedAt = Date.now();
+    setNow(startedAt);
+    setDeadline(startedAt + ROUND_MS);
+    setPhase("running");
+  };
+
+  const resetRound = () => {
+    setPhase("idle");
+    setDeadline(null);
+    setNow(Date.now());
+  };
+
+  // Before a round starts there is no deadline yet, so a full round is left.
+  const remaining = deadline === null ? ROUND_MS : remainingMs(deadline, now);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
+    <main className="timer">
+      <div className="timer__clock" role="timer">
+        {formatRemaining(remaining)}
+      </div>
+
+      <div className="timer__controls">
         <button
           type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
+          onClick={startRound}
+          disabled={phase === "running"}
         >
-          Count is {count}
+          Start
         </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+        <button type="button" onClick={resetRound}>
+          Reset
+        </button>
+      </div>
+    </main>
+  );
 }
 
-export default App
+export default App;

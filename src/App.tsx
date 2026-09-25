@@ -8,6 +8,7 @@ import {
   mainLabel,
   modeIsActive,
   reduce,
+  roundDurationMs,
   selectionLabel,
 } from "./round";
 import "./App.css";
@@ -106,13 +107,25 @@ function App() {
         </span>
         {isPlaceholderMode(state) && (
           <span className="timer__mode-note">
-            {`Placeholder — runs the ${formatRemaining(displayMs(state, now))} round`}
+            Placeholder — not a real preset yet
           </span>
         )}
       </div>
 
-      <div className="timer__clock" role="timer">
-        {formatRemaining(displayMs(state, now))}
+      <div className="timer__readout">
+        <div className="timer__clock" role="timer">
+          {formatRemaining(displayMs(state, now))}
+        </div>
+
+        {/*
+          The round's CONFIGURED length, from the selected mode. Never derived
+          from what is left, so it stays put while the clock counts down. It sits
+          outside the role="timer" element so that element still speaks only the
+          remaining time.
+        */}
+        <p className="timer__duration">
+          {`Round: ${formatRemaining(roundDurationMs(state.modeIndex))}`}
+        </p>
       </div>
 
       <div className="timer__controls">
@@ -120,21 +133,39 @@ function App() {
           Main is never disabled. A long hold must keep working while a round runs
           or is paused, even though the short action changes meaning there.
         */}
-        <button type="button" {...pressHandlers(mainPress)}>
-          {mainLabel(state)}
-        </button>
+        <div className="timer__control">
+          <button
+            type="button"
+            aria-describedby="main-hint"
+            {...pressHandlers(mainPress)}
+          >
+            {mainLabel(state)}
+          </button>
+          <span className="timer__hint" id="main-hint">
+            Hold to reset
+          </span>
+        </div>
 
         {/*
           Mode stays visible and focusable. While a round is in flight the reducer
-          ignores its presses, rather than the button disappearing.
+          ignores its presses, so the hint must not promise that holding works
+          right now.
         */}
-        <button
-          type="button"
-          aria-disabled={modeActive ? undefined : true}
-          {...pressHandlers(modePress)}
-        >
-          Mode
-        </button>
+        <div className="timer__control">
+          <button
+            type="button"
+            aria-disabled={modeActive ? undefined : true}
+            aria-describedby="mode-hint"
+            {...pressHandlers(modePress)}
+          >
+            Mode
+          </button>
+          <span className="timer__hint" id="mode-hint">
+            {modeActive
+              ? "Hold for options"
+              : "Unavailable until the round ends"}
+          </span>
+        </div>
       </div>
     </main>
   );

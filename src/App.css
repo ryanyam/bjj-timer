@@ -41,10 +41,18 @@
 }
 
 .timer__mode-note {
-  font-size: clamp(0.75rem, 1.3vw, 1rem);
+  /* Readable rather than decorative: no uppercase, and a floor of 14px so it is
+     still legible on a phone. --text on --bg is 5.7:1 in light mode and 7.0:1 in
+     dark, both above the 4.5:1 WCAG AA minimum. */
+  font-size: clamp(0.875rem, 1.4vw, 1.125rem);
   color: var(--text);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+}
+
+.timer__readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(0.25rem, 1vh, 0.75rem);
 }
 
 .timer__clock {
@@ -60,11 +68,34 @@
   letter-spacing: 0.02em;
 }
 
+.timer__duration {
+  /* The configured round length. Deliberately quiet so the countdown stays
+     dominant, but never smaller than 16px and never below AA contrast. */
+  margin: 0;
+  font-family: var(--mono);
+  font-size: clamp(1rem, 1.8vw, 1.5rem);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
 .timer__controls {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: clamp(0.5rem, 1.5vh, 1rem);
+  gap: clamp(0.75rem, 3vw, 2rem);
+}
+
+.timer__control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.timer__hint {
+  font-size: clamp(0.875rem, 1.5vw, 1.125rem);
+  color: var(--text);
+  text-align: center;
 }
 
 .timer__controls button {
@@ -77,10 +108,21 @@
   background: var(--accent-bg);
   cursor: pointer;
   transition: border-color 0.3s;
+
+  /* Keeps the browser from spending a double-tap-to-zoom delay on taps. */
+  touch-action: manipulation;
 }
 
 .timer__controls button:hover:not([aria-disabled="true"]) {
   border-color: var(--accent-border);
+}
+
+/* Immediate, CSS-only feedback that the press registered. This shows while the
+   button is held and disappears on release or cancellation; it does not change
+   when an action fires, which is still on release. */
+.timer__controls button:active:not([aria-disabled="true"]) {
+  border-color: var(--accent);
+  transform: translateY(1px);
 }
 
 .timer__controls button:focus-visible {

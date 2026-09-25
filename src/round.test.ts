@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ROUND_MS } from "./timer";
+import { ROUND_MS, formatRemaining } from "./timer";
 import {
   MODE_SELECTIONS,
   displayMs,
@@ -371,5 +371,61 @@ describe("the tick action", () => {
 
     expect(displayMs(finished, T0 + ROUND_MS)).toBe(0);
     expect(displayMs(finished, T0 + 90 * MINUTE)).toBe(0);
+  });
+});
+
+describe("timing boundaries", () => {
+  it("sets the deadline to exactly the start plus the configured duration", () => {
+    // A deliberately off-second start, so any rounding of the deadline shows up.
+    const oddStart = T0 + 137;
+    const state = run(initialRoundState, [
+      { type: "mainShort", now: oddStart },
+    ]);
+
+    expect(state.deadline).toBe(oddStart + ROUND_MS);
+    expect((state.deadline ?? 0) - oddStart).toBe(300_000);
+  });
+
+  it("says 0:01 with a second left and 0:00 only at the deadline", () => {
+    const running = started();
+    const deadline = running.deadline ?? 0;
+
+    expect(formatRemaining(displayMs(running, deadline - 1_000))).toBe("0:01");
+    expect(formatRemaining(displayMs(running, deadline - 1))).toBe("0:01");
+    expect(formatRemaining(displayMs(running, deadline))).toBe("0:00");
+  });
+
+  it("finishes at the original deadline, neither a second early nor a second late", () => {
+    const running = started();
+    const deadline = running.deadline ?? 0;
+
+    expect(run(running, [{ type: "tick", now: deadline - 1 }]).phase).toBe(
+      "running",
+    );
+    expect(run(running, [{ type: "tick", now: deadline }]).phase).toBe(
+      "finished",
+    );
+    expect(run(running, [{ type: "tick", now: deadline + 1 }]).phase).toBe(
+      "finished",
+    );
+  });
+
+  it("loses and gains no milliseconds across a pause and resume", () => {
+    const first = started(T0);
+    const pausedAt = T0 + 137_419; // deliberately not on a second boundary
+    const paused = run(first, [{ type: "mainShort", now: pausedAt }]);
+    const frozen = (paused.deadline ?? 0) - pausedAt;
+
+    expect(frozen).toBe(300_000 - 137_419);
+
+    const resumedAt = T0 + 9_137_419;
+    const resumed = run(paused, [{ type: "mainShort", now: resumedAt }]);
+
+    // The new deadline carries the exact frozen remainder, to the millisecond.
+    expect(resumed.deadline).toBe(resumedAt + frozen);
+    // And the display neither jumps nor rounds into a gain.
+    expect(displayMs(resumed, resumedAt)).toBe(displayMs(paused, resumedAt));
+    expect(formatRemaining(displayMs(resumed, resumedAt))).toBe("2:43");
+    expect(formatRemaining(displayMs(paused, resumedAt))).toBe("2:43");
   });
 });

@@ -55,6 +55,11 @@ function modeText(): string {
   return screen.getByText(/^Mode \S+$/).textContent ?? "";
 }
 
+/** The fixed round-length reference, e.g. "Round: 5:00". */
+function durationText(): string {
+  return screen.getByText(/^Round: /).textContent ?? "";
+}
+
 function advance(ms: number): void {
   // With fake timers, advanceTimersByTime moves the faked clock as well as the
   // pending callbacks, so the timer's reading of "now" and its scheduled tick
@@ -535,5 +540,139 @@ describe("the Mode button", () => {
     pressModeShort();
 
     expect(modeText()).toBe("Mode 2");
+  });
+});
+
+describe("the round reference", () => {
+  it("shows the configured round length beside the countdown", () => {
+    render(<App />);
+
+    expect(durationText()).toBe("Round: 5:00");
+    expect(clockText()).toBe("5:00");
+  });
+
+  it("stays fixed while running, paused and finished", () => {
+    render(<App />);
+
+    pressMainShort();
+    advance(2 * MINUTE);
+    expect(clockText()).toBe("3:00");
+    expect(durationText()).toBe("Round: 5:00");
+
+    pressMainShort();
+    advance(10 * MINUTE);
+    expect(mainLabelText()).toBe("Resume");
+    expect(durationText()).toBe("Round: 5:00");
+
+    pressMainShort();
+    advance(4 * MINUTE);
+    expect(mainLabelText()).toBe("Reset");
+    expect(durationText()).toBe("Round: 5:00");
+  });
+
+  it("tracks the selected mode's own duration", () => {
+    render(<App />);
+
+    // Every placeholder mode currently shares five minutes, so the text cannot
+    // differ between modes yet. What this pins is that the reference still reads
+    // the configured length once the selection has moved.
+    pressModeShort();
+    pressModeShort();
+    pressModeShort();
+
+    expect(modeText()).toBe("Mode 4");
+    expect(durationText()).toBe("Round: 5:00");
+  });
+
+  it("keeps the reference out of the timer element, which speaks only the countdown", () => {
+    render(<App />);
+
+    expect(screen.getByRole("timer").textContent).toBe("5:00");
+    expect(durationText()).toBe("Round: 5:00");
+  });
+});
+
+describe("the button hints", () => {
+  it("explains the long press for both buttons", () => {
+    render(<App />);
+
+    expect(screen.getByText("Hold to reset")).toBeTruthy();
+    expect(screen.getByText("Hold for options")).toBeTruthy();
+  });
+
+  it("associates each hint with its button for assistive technology", () => {
+    render(<App />);
+
+    expect(mainButton().getAttribute("aria-describedby")).toBe("main-hint");
+    expect(modeButton().getAttribute("aria-describedby")).toBe("mode-hint");
+  });
+
+  it("stops promising Mode will work while a round is running", () => {
+    render(<App />);
+    pressMainShort();
+
+    expect(screen.queryByText("Hold for options")).toBeNull();
+    expect(screen.getByText("Unavailable until the round ends")).toBeTruthy();
+    // Main's own hint is unaffected.
+    expect(screen.getByText("Hold to reset")).toBeTruthy();
+  });
+
+  it("stops promising Mode will work while a round is paused", () => {
+    render(<App />);
+    pressMainShort();
+    pressMainShort();
+
+    expect(screen.queryByText("Hold for options")).toBeNull();
+    expect(screen.getByText("Unavailable until the round ends")).toBeTruthy();
+  });
+
+  it("promises Mode again once the round is over", () => {
+    render(<App />);
+    pressMainShort();
+    advance(5 * MINUTE);
+
+    expect(screen.getByText("Hold for options")).toBeTruthy();
+    expect(screen.queryByText("Unavailable until the round ends")).toBeNull();
+  });
+
+  it("keeps the hint out of the button's own name", () => {
+    render(<App />);
+
+    expect(screen.getByText("Hold to reset")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start" })).toBe(mainButton());
+  });
+});
+
+describe("the placeholder note", () => {
+  it("does not repeat the countdown and does not move as the clock runs", () => {
+    render(<App />);
+    pressModeShort();
+
+    const note = screen.getByText(/placeholder/i).textContent ?? "";
+
+    // The configured duration is reported once, by the round reference.
+    expect(note).not.toMatch(/\d+:\d\d/);
+
+    pressMainShort();
+    advance(2 * MINUTE);
+
+    expect(screen.getByText(/placeholder/i).textContent).toBe(note);
+  });
+});
+
+describe("the clock at the end of a round", () => {
+  it("shows 0:01 with a second to go and reaches 0:00 only at the deadline", () => {
+    render(<App />);
+    pressMainShort();
+
+    advance(4 * MINUTE + 59 * SECOND);
+
+    expect(clockText()).toBe("0:01");
+    expect(mainLabelText()).toBe("Pause");
+
+    advance(1 * SECOND);
+
+    expect(clockText()).toBe("0:00");
+    expect(mainLabelText()).toBe("Reset");
   });
 });

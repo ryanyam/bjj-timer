@@ -32,21 +32,24 @@ export function remainingMs(deadline: number, now: number): number {
 }
 
 /**
- * Formats a remaining duration as "M:SS": minutes unpadded, seconds padded to
- * two digits, so a five minute round reads "5:00" and runs down to "0:00".
+ * Formats a duration as "M:SS": minutes unpadded, seconds padded to two digits,
+ * so a five minute round reads "5:00" and runs down to "0:00".
  *
- * Truncates rather than rounds. With 7.6 seconds left, "0:07" is honest, while
- * rounding would show "0:08" — a second that has not elapsed yet.
+ * Rounds UP to the next whole second, so the value shown is "seconds still to
+ * come". That is what makes a countdown behave at both ends:
+ *   - 300000 ms and 299999 ms both read "5:00", so a fresh five minute round is
+ *     on screen for its whole first second instead of flipping to 4:59 at the
+ *     first repaint
+ *   - 1000 ms reads "0:01" and 1 ms still reads "0:01", so "0:00" appears only
+ *     when the deadline has actually been reached
  *
- * Known cost of truncating, measured against this function rather than assumed:
- * a round reads "0:00" for its final 999 ms, so it looks finished about a second
- * early, and a fresh "5:00" is on screen for only about 1 ms. Rounding up with
- * Math.ceil would fix both, at the price of showing "0:08" when 7.6 s remain.
- * Deferred on purpose until there is an end-of-round signal (bell, flash), which
- * is the point where an early 0:00 starts to matter. Revisit then.
+ * The cost, stated plainly: 7.6 s remaining reads "0:08". That is the usual
+ * countdown convention — the display never claims less time is left than there
+ * really is. This replaced an earlier truncating version, which showed "0:00"
+ * for the final 999 ms and lost "5:00" after one 250 ms tick.
  */
 export function formatRemaining(ms: number): string {
-  const totalSeconds = Math.floor(Math.max(0, ms) / MS_PER_SECOND);
+  const totalSeconds = Math.ceil(Math.max(0, ms) / MS_PER_SECOND);
   const minutes = Math.floor(totalSeconds / SECONDS_PER_MINUTE);
   const seconds = totalSeconds % SECONDS_PER_MINUTE;
 

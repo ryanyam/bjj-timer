@@ -8,10 +8,11 @@
  */
 
 .timer {
-  /* Two rows: the clock takes whatever space is left, controls sit under it. */
+  /* Three rows: the mode indicator and the controls keep their natural height,
+     the clock takes whatever space is left. */
   height: 100%;
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: auto 1fr auto;
   place-items: center;
   gap: clamp(1rem, 3vh, 3rem);
   padding: clamp(1rem, 4vh, 4rem);
@@ -23,6 +24,27 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
+}
+
+.timer__mode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  text-align: center;
+}
+
+.timer__mode-value {
+  font-size: clamp(1.25rem, 3vw, 2.25rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.timer__mode-note {
+  font-size: clamp(0.75rem, 1.3vw, 1rem);
+  color: var(--text);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .timer__clock {
@@ -57,7 +79,7 @@
   transition: border-color 0.3s;
 }
 
-.timer__controls button:hover:not(:disabled) {
+.timer__controls button:hover:not([aria-disabled="true"]) {
   border-color: var(--accent-border);
 }
 
@@ -66,7 +88,10 @@
   outline-offset: 2px;
 }
 
-.timer__controls button:disabled {
+/* Mode is shown as unavailable while a round is in flight. It stays focusable —
+   disabling it would blur whatever the operator was focused on. */
+.timer__controls button:disabled,
+.timer__controls button[aria-disabled="true"] {
   opacity: 0.4;
   cursor: default;
 }

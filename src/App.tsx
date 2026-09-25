@@ -1,23 +1,64 @@
-import { useEffect, useState } from "react";
-import { ROUND_MS, formatRemaining, remainingMs } from "./timer";
+import { useEffect, useReducer, useState, type MouseEvent } from "react";
+import { formatRemaining } from "./timer";
+import { createPressRecogniser, type PressRecogniser } from "./press";
+import {
+  displayMs,
+  initialRoundState,
+  isPlaceholderMode,
+  mainLabel,
+  modeIsActive,
+  reduce,
+  selectionLabel,
+} from "./round";
 import "./App.css";
 
 /**
  * How often the display re-reads the clock. This is a refresh rate, not the
- * length of the round: the round's length is ROUND_MS, and this only decides how
- * quickly the screen notices that time has passed.
+ * length of the round: round length comes from the selected mode, and this only
+ * decides how quickly the screen notices that time has passed.
  */
 const TICK_MS = 250;
 
-type Phase = "idle" | "running" | "finished";
-
 function App() {
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [deadline, setDeadline] = useState<number | null>(null);
+  const [state, dispatch] = useReducer(reduce, initialRoundState);
   const [now, setNow] = useState(() => Date.now());
 
+  /*
+   * One recogniser per operator input, created once and never replaced: a hold
+   * must not be forgotten because React re-rendered. A future GPIO layer would
+   * build the very same objects and call pressDown/pressUp on them.
+   *
+   * `useState` with an initialiser is how a long-lived object is created once
+   * without reading a ref during render.
+   */
+  const [mainPress] = useState(() =>
+    createPressRecogniser({
+      onPress: (kind) => {
+        const reading = Date.now();
+        // Refresh the display clock with the same reading that drives the action,
+        // so a new deadline is always rendered against the instant it was built
+        // from. Without this, the first frame after Start or Resume would show the
+        // time left as measured from an older clock reading.
+        setNow(reading);
+        dispatch(
+          kind === "long"
+            ? { type: "mainLong", now: reading }
+            : { type: "mainShort", now: reading },
+        );
+      },
+    }),
+  );
+
+  const [modePress] = useState(() =>
+    createPressRecogniser({
+      onPress: (kind) => {
+        dispatch({ type: kind === "long" ? "modeLong" : "modeShort" });
+      },
+    }),
+  );
+
   useEffect(() => {
-    if (phase !== "running" || deadline === null) {
+    if (state.phase !== "running" || state.deadline === null) {
       return;
     }
 
@@ -26,57 +67,103 @@ function App() {
     // self-correcting: a late, skipped or doubled tick cannot make the round run
     // long, because the next tick starts from the truth again.
     const tick = () => {
-      const currentTime = Date.now();
-      setNow(currentTime);
-
-      if (currentTime >= deadline) {
-        setPhase("finished");
-      }
+      const reading = Date.now();
+      setNow(reading);
+      dispatch({ type: "tick", now: reading });
     };
 
     const intervalId = setInterval(tick, TICK_MS);
 
     // Clearing the loop here is what stops StrictMode's development double-mount
-    // (and unmounting mid-round, and Reset) from leaving a ticking loop behind.
+    // (and unmounting mid-round) from leaving a ticking loop behind.
     return () => clearInterval(intervalId);
-  }, [phase, deadline]);
+  }, [state.phase, state.deadline]);
 
-  const startRound = () => {
-    const startedAt = Date.now();
-    setNow(startedAt);
-    setDeadline(startedAt + ROUND_MS);
-    setPhase("running");
-  };
+  useEffect(() => {
+    const cancelPresses = () => {
+      mainPress.cancel();
+      modePress.cancel();
+    };
 
-  const resetRound = () => {
-    setPhase("idle");
-    setDeadline(null);
-    setNow(Date.now());
-  };
+    // Losing focus abandons a press in flight: the operator has looked away, and a
+    // half-finished hold must not complete later.
+    window.addEventListener("blur", cancelPresses);
 
-  // Before a round starts there is no deadline yet, so a full round is left.
-  const remaining = deadline === null ? ROUND_MS : remainingMs(deadline, now);
+    return () => {
+      window.removeEventListener("blur", cancelPresses);
+      // Unmount: drop any outstanding hold without firing anything.
+      cancelPresses();
+    };
+  }, [mainPress, modePress]);
+
+  const modeActive = modeIsActive(state);
 
   return (
     <main className="timer">
+      <div className="timer__mode">
+        <span className="timer__mode-value">
+          {`Mode ${selectionLabel(state)}`}
+        </span>
+        {isPlaceholderMode(state) && (
+          <span className="timer__mode-note">
+            {`Placeholder — runs the ${formatRemaining(displayMs(state, now))} round`}
+          </span>
+        )}
+      </div>
+
       <div className="timer__clock" role="timer">
-        {formatRemaining(remaining)}
+        {formatRemaining(displayMs(state, now))}
       </div>
 
       <div className="timer__controls">
+        {/*
+          Main is never disabled. A long hold must keep working while a round runs
+          or is paused, even though the short action changes meaning there.
+        */}
+        <button type="button" {...pressHandlers(mainPress)}>
+          {mainLabel(state)}
+        </button>
+
+        {/*
+          Mode stays visible and focusable. While a round is in flight the reducer
+          ignores its presses, rather than the button disappearing.
+        */}
         <button
           type="button"
-          onClick={startRound}
-          disabled={phase === "running"}
+          aria-disabled={modeActive ? undefined : true}
+          {...pressHandlers(modePress)}
         >
-          Start
-        </button>
-        <button type="button" onClick={resetRound}>
-          Reset
+          Mode
         </button>
       </div>
     </main>
   );
+}
+
+/**
+ * Bridges a pointer to one recogniser.
+ *
+ * Only pointer events drive the timing. A real mouse press also emits `click`
+ * after pointerup, so `click` is used *only* for keyboard activation, which
+ * arrives with `detail === 0` and never follows a pointer press. That is what
+ * keeps one press from firing two actions.
+ */
+function pressHandlers(recogniser: PressRecogniser) {
+  return {
+    onPointerDown: () => recogniser.pressDown(),
+    onPointerUp: () => recogniser.pressUp(),
+    onPointerLeave: () => recogniser.cancel(),
+    onPointerCancel: () => recogniser.cancel(),
+    onClick: (event: MouseEvent<HTMLButtonElement>) => {
+      if (event.detail !== 0) {
+        return;
+      }
+
+      // Keyboard: one complete short press, with no hold to time.
+      recogniser.pressDown();
+      recogniser.pressUp();
+    },
+  };
 }
 
 export default App;

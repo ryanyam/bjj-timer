@@ -98,19 +98,17 @@ describe("Main short press", () => {
     expect(state.deadline).toBe(T0 + ROUND_MS);
   });
 
-  it("resumes from PAUSED onto a new deadline, not a fresh round", () => {
+  it("resets from PAUSED to READY, keeping the selection", () => {
     const paused = run(started(), [
       { type: "mainShort", now: T0 + 2 * MINUTE + 34 * SECOND },
     ]);
 
-    const resumed = run(paused, [{ type: "mainShort", now: T0 + 20 * MINUTE }]);
+    const reset = run(paused, [{ type: "mainShort", now: T0 + 20 * MINUTE }]);
 
-    const frozen = ROUND_MS - (2 * MINUTE + 34 * SECOND);
-
-    expect(resumed.phase).toBe("running");
-    expect(resumed.deadline).toBe(T0 + 20 * MINUTE + frozen);
-    expect(resumed.deadline).not.toBe(T0 + 20 * MINUTE + ROUND_MS);
-    expect(displayMs(resumed, T0 + 20 * MINUTE)).toBe(frozen);
+    expect(reset.phase).toBe("ready");
+    expect(reset.deadline).toBeNull();
+    expect(reset.pausedAt).toBeNull();
+    expect(displayMs(reset, T0 + 20 * MINUTE)).toBe(ROUND_MS);
   });
 
   it("acknowledges from FINISHED back to READY", () => {
@@ -132,12 +130,12 @@ describe("the Main label", () => {
 
     expect(mainLabel(initialRoundState)).toBe("Start");
     expect(mainLabel(started())).toBe("Pause");
-    expect(mainLabel(paused)).toBe("Resume");
+    expect(mainLabel(paused)).toBe("Reset");
     expect(mainLabel(finished)).toBe("Reset");
   });
 });
 
-describe("pause and resume timing", () => {
+describe("pause, then reset", () => {
   it("freezes the exact remainder while paused", () => {
     const paused = run(started(), [
       { type: "mainShort", now: T0 + 2 * MINUTE + 34 * SECOND },
@@ -153,30 +151,18 @@ describe("pause and resume timing", () => {
     );
   });
 
-  it("continues from the frozen remainder after resuming", () => {
-    const paused = run(started(), [
-      { type: "mainShort", now: T0 + 2 * MINUTE + 34 * SECOND },
-    ]);
-    const resumedAt = T0 + 30 * MINUTE;
-    const resumed = run(paused, [{ type: "mainShort", now: resumedAt }]);
+  it("restores the whole session from PAUSED, preserving mode and option", () => {
+    const chosen = selectOption(selectMode(initialRoundState, 3), 2);
 
-    expect(displayMs(resumed, resumedAt)).toBe(
-      ROUND_MS - (2 * MINUTE + 34 * SECOND),
-    );
-    expect(displayMs(resumed, resumedAt + SECOND)).toBe(
-      ROUND_MS - (2 * MINUTE + 35 * SECOND),
-    );
-  });
+    expect(selectionLabel(chosen)).toBe("4c");
 
-  it("still ends the round at the resumed deadline", () => {
-    const paused = run(started(), [{ type: "mainShort", now: T0 + MINUTE }]);
-    const resumed = run(paused, [{ type: "mainShort", now: T0 + 10 * MINUTE }]);
-    const end = resumed.deadline ?? 0;
+    const running = run(chosen, [{ type: "mainShort", now: T0 + MINUTE }]);
+    const paused = run(running, [{ type: "mainShort", now: T0 + 2 * MINUTE }]);
+    const reset = run(paused, [{ type: "mainShort", now: T0 + 10 * MINUTE }]);
 
-    expect(displayMs(resumed, end + 1)).toBe(0);
-    expect(run(resumed, [{ type: "tick", now: end + 1 }]).phase).toBe(
-      "finished",
-    );
+    expect(reset.phase).toBe("ready");
+    expect(selectionLabel(reset)).toBe("4c");
+    expect(displayMs(reset, T0 + 10 * MINUTE)).toBe(roundDurationMs(3));
   });
 });
 
@@ -408,24 +394,5 @@ describe("timing boundaries", () => {
     expect(run(running, [{ type: "tick", now: deadline + 1 }]).phase).toBe(
       "finished",
     );
-  });
-
-  it("loses and gains no milliseconds across a pause and resume", () => {
-    const first = started(T0);
-    const pausedAt = T0 + 137_419; // deliberately not on a second boundary
-    const paused = run(first, [{ type: "mainShort", now: pausedAt }]);
-    const frozen = (paused.deadline ?? 0) - pausedAt;
-
-    expect(frozen).toBe(300_000 - 137_419);
-
-    const resumedAt = T0 + 9_137_419;
-    const resumed = run(paused, [{ type: "mainShort", now: resumedAt }]);
-
-    // The new deadline carries the exact frozen remainder, to the millisecond.
-    expect(resumed.deadline).toBe(resumedAt + frozen);
-    // And the display neither jumps nor rounds into a gain.
-    expect(displayMs(resumed, resumedAt)).toBe(displayMs(paused, resumedAt));
-    expect(formatRemaining(displayMs(resumed, resumedAt))).toBe("2:43");
-    expect(formatRemaining(displayMs(paused, resumedAt))).toBe("2:43");
   });
 });

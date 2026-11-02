@@ -11,6 +11,7 @@ import {
   roundDurationMs,
   selectionLabel,
 } from "./round";
+import { useGamepadInput, type GamepadStatus } from "./useGamepadInput";
 import "./App.css";
 
 /**
@@ -20,9 +21,32 @@ import "./App.css";
  */
 const TICK_MS = 250;
 
+const GAMEPAD_STATUS_TEXT: Record<GamepadStatus, string> = {
+  connected: "Controller connected",
+  waiting: "Controller: press a button to connect",
+  unsupported: "Controller: not available in this browser",
+};
+
 function App() {
   const [state, dispatch] = useReducer(reduce, initialRoundState);
   const [now, setNow] = useState(() => Date.now());
+
+  const modeActive = modeIsActive(state);
+
+  /*
+   * Main short press. Shared by the green arcade button and the on-screen
+   * Main control, so the hardware and the screen always run the same action.
+   *
+   * The display clock is refreshed with the same reading that drives the
+   * action, so a new deadline is always rendered against the instant it was
+   * built from. Without this, the first frame after Start would show the time
+   * left as measured from an older clock reading.
+   */
+  const mainShort = () => {
+    const reading = Date.now();
+    setNow(reading);
+    dispatch({ type: "mainShort", now: reading });
+  };
 
   /*
    * One recogniser per operator input, created once and never replaced: a hold
@@ -35,17 +59,13 @@ function App() {
   const [mainPress] = useState(() =>
     createPressRecogniser({
       onPress: (kind) => {
-        const reading = Date.now();
-        // Refresh the display clock with the same reading that drives the action,
-        // so a new deadline is always rendered against the instant it was built
-        // from. Without this, the first frame after Start or Resume would show the
-        // time left as measured from an older clock reading.
-        setNow(reading);
-        dispatch(
-          kind === "long"
-            ? { type: "mainLong", now: reading }
-            : { type: "mainShort", now: reading },
-        );
+        if (kind === "long") {
+          const reading = Date.now();
+          setNow(reading);
+          dispatch({ type: "mainLong", now: reading });
+        } else {
+          mainShort();
+        }
       },
     }),
   );
@@ -53,10 +73,24 @@ function App() {
   const [modePress] = useState(() =>
     createPressRecogniser({
       onPress: (kind) => {
+        // The on-screen Mode control keeps its original mapping: short cycles
+        // the main mode, long cycles the option within it.
         dispatch({ type: kind === "long" ? "modeLong" : "modeShort" });
       },
     }),
   );
+
+  /*
+   * The arcade panel's white button inverts that mapping, as agreed: short
+   * press cycles the option, an 800 ms hold cycles the main mode. Both reuse
+   * the reducer actions above rather than duplicating timer or selection logic.
+   */
+  const gamepadStatus = useGamepadInput({
+    onMain: mainShort,
+    onOption: () => dispatch({ type: "modeLong" }),
+    onMode: () => dispatch({ type: "modeShort" }),
+    selectionEnabled: modeActive,
+  });
 
   useEffect(() => {
     if (state.phase !== "running" || state.deadline === null) {
@@ -96,8 +130,6 @@ function App() {
       cancelPresses();
     };
   }, [mainPress, modePress]);
-
-  const modeActive = modeIsActive(state);
 
   return (
     <main className="timer">
@@ -167,6 +199,22 @@ function App() {
           </span>
         </div>
       </div>
+
+      {/*
+        The physical panel's help. Quiet by design: the countdown stays the
+        dominant element, and none of this is an interactive control.
+      */}
+      <footer className="timer__gamepad">
+        <p
+          className={`timer__gamepad-status timer__gamepad-status--${gamepadStatus}`}
+        >
+          {GAMEPAD_STATUS_TEXT[gamepadStatus]}
+        </p>
+        <p className="timer__gamepad-hint">Green: Start / Pause / Reset</p>
+        <p className="timer__gamepad-hint">
+          White: Press for option · Hold for mode
+        </p>
+      </footer>
     </main>
   );
 }

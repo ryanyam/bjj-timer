@@ -8,11 +8,12 @@
  */
 
 .timer {
-  /* Three rows: the mode indicator and the controls keep their natural height,
-     the clock takes whatever space is left. */
+  /* Four rows: the mode indicator, the clock, and the controls keep their
+     natural height; the clock takes whatever space is left. The last row is the
+     physical-panel status and hint, deliberately the smallest thing on screen. */
   height: 100%;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto 1fr auto auto;
   place-items: center;
   gap: clamp(1rem, 3vh, 3rem);
   padding: clamp(1rem, 4vh, 4rem);
@@ -136,4 +137,42 @@
 .timer__controls button[aria-disabled="true"] {
   opacity: 0.4;
   cursor: default;
+}
+
+/*
+ * Physical panel status and hint. Kept small and muted so it never competes with
+ * the countdown; --text stays above the 4.5:1 WCAG AA contrast minimum.
+ */
+.timer__gamepad {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  text-align: center;
+  color: var(--text);
+  font-size: clamp(0.8rem, 1.1vw, 1rem);
+}
+
+.timer__gamepad-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.2rem;
+}
+
+/* Small indicator only: no icon font, no layout shift. */
+.timer__gamepad-status::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--border);
+}
+
+.timer__gamepad-status--connected::before {
+  background: #2f9e5f;
+}
+
+.timer__gamepad-hint {
+  margin: 0;
 }

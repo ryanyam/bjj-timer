@@ -91,7 +91,13 @@ export function isPlaceholderMode(state: RoundState): boolean {
   return state.modeIndex !== REAL_MODE_INDEX;
 }
 
-/** The visible Main label, which always names the next short-press action. */
+/**
+ * The visible Main label, which always names the next short-press action.
+ *
+ * PAUSED and FINISHED both lead to a reset, so both say "Reset". The agreed
+ * physical sequence is Start -> Pause -> Reset -> Start; the pause state still
+ * freezes the clock for the operator to read.
+ */
 export function mainLabel(state: RoundState): string {
   switch (state.phase) {
     case "ready":
@@ -99,7 +105,7 @@ export function mainLabel(state: RoundState): string {
     case "running":
       return "Pause";
     case "paused":
-      return "Resume";
+      return "Reset";
     case "finished":
       return "Reset";
   }
@@ -139,7 +145,7 @@ export function reduce(state: RoundState, action: RoundAction): RoundState {
     case "mainLong":
       // Reset from ANY state, including RUNNING and PAUSED. The selected mode
       // and option are deliberately preserved; only the round is restored.
-      return { ...state, phase: "ready", deadline: null, pausedAt: null };
+      return resetSession(state);
 
     case "modeShort":
       // Landing on a new top-level mode starts at that mode's base selection.
@@ -182,27 +188,23 @@ function onMainShort(state: RoundState, now: number): RoundState {
       return { ...state, phase: "paused", pausedAt: now };
 
     case "paused":
-      // Resume builds a NEW deadline from the frozen remainder, so the round
-      // continues where it stopped instead of restarting a full round.
-      return {
-        ...state,
-        phase: "running",
-        deadline: now + frozenRemaining(state),
-        pausedAt: null,
-      };
+      // The agreed sequence is Start -> Pause -> Reset -> Start. A paused main
+      // press abandons the round and returns to the initial READY state,
+      // keeping the selected mode and option. It does NOT resume.
+      return resetSession(state);
 
     case "finished":
-      return { ...state, phase: "ready", deadline: null, pausedAt: null };
+      return resetSession(state);
   }
 }
 
-/** Only meaningful while paused. */
-function frozenRemaining(state: RoundState): number {
-  if (state.deadline === null || state.pausedAt === null) {
-    return 0;
-  }
-
-  return remainingMs(state.deadline, state.pausedAt);
+/**
+ * Restore the session to its initial READY state while keeping the operator's
+ * mode and option selection. There is no stored countdown to unwind: dropping
+ * the deadline is what restores the full configured round.
+ */
+function resetSession(state: RoundState): RoundState {
+  return { ...state, phase: "ready", deadline: null, pausedAt: null };
 }
 
 function onTick(state: RoundState, now: number): RoundState {

@@ -21,7 +21,7 @@ const START = Date.UTC(2026, 0, 1, 0, 0, 0);
 const SECOND = 1_000;
 const MINUTE = 60 * SECOND;
 
-const MAIN_LABELS = ["Start", "Pause", "Resume", "Reset"];
+const MAIN_LABELS = ["Start", "Pause", "Reset"];
 
 function clockText(): string {
   return screen.getByRole("timer").textContent ?? "";
@@ -241,7 +241,7 @@ describe("resetting", () => {
     pressMainShort();
     advance(1 * MINUTE);
     pressMainShort();
-    expect(mainLabelText()).toBe("Resume");
+    expect(mainLabelText()).toBe("Reset");
 
     pressMainLong();
 
@@ -287,10 +287,10 @@ describe("the Main button label", () => {
     expect(mainLabelText()).toBe("Pause");
 
     pressMainShort();
-    expect(mainLabelText()).toBe("Resume");
+    expect(mainLabelText()).toBe("Reset");
 
     pressMainShort();
-    expect(mainLabelText()).toBe("Pause");
+    expect(mainLabelText()).toBe("Start");
   });
 
   it("stays enabled while a round is running, so a long hold still works", () => {
@@ -309,7 +309,7 @@ describe("the Main button label", () => {
   });
 });
 
-describe("pause and resume", () => {
+describe("pause and reset", () => {
   it("freezes the clock while paused", () => {
     render(<App />);
     pressMainShort();
@@ -321,20 +321,19 @@ describe("pause and resume", () => {
     expect(clockText()).toBe("4:00");
   });
 
-  it("resumes from the frozen time instead of restarting the round", () => {
+  it("resets to the full round from PAUSED, without resuming", () => {
     render(<App />);
     pressMainShort();
     advance(1 * MINUTE);
     pressMainShort();
     advance(10 * MINUTE);
 
+    expect(mainLabelText()).toBe("Reset");
     pressMainShort();
 
-    expect(clockText()).toBe("4:00");
-
-    advance(1 * SECOND);
-
-    expect(clockText()).toBe("3:59");
+    expect(mainLabelText()).toBe("Start");
+    expect(clockText()).toBe("5:00");
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 
@@ -371,7 +370,10 @@ describe("one press, one action", () => {
     expect(mainLabelText()).toBe("Pause");
 
     fireEvent.click(mainButton(), { detail: 0 });
-    expect(mainLabelText()).toBe("Resume");
+    expect(mainLabelText()).toBe("Reset");
+
+    fireEvent.click(mainButton(), { detail: 0 });
+    expect(mainLabelText()).toBe("Start");
   });
 
   it("does not fire the long action for a keypress, however long it is held", () => {
@@ -561,12 +563,13 @@ describe("the round reference", () => {
 
     pressMainShort();
     advance(10 * MINUTE);
-    expect(mainLabelText()).toBe("Resume");
+    expect(mainLabelText()).toBe("Reset");
+    expect(clockText()).toBe("3:00");
     expect(durationText()).toBe("Round: 5:00");
 
     pressMainShort();
-    advance(4 * MINUTE);
-    expect(mainLabelText()).toBe("Reset");
+    expect(mainLabelText()).toBe("Start");
+    expect(clockText()).toBe("5:00");
     expect(durationText()).toBe("Round: 5:00");
   });
 

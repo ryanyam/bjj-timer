@@ -98,17 +98,19 @@ describe("Main short press", () => {
     expect(state.deadline).toBe(T0 + ROUND_MS);
   });
 
-  it("resets from PAUSED to READY, keeping the selection", () => {
+  it("resumes from PAUSED onto a new deadline, not a fresh round", () => {
     const paused = run(started(), [
       { type: "mainShort", now: T0 + 2 * MINUTE + 34 * SECOND },
     ]);
 
-    const reset = run(paused, [{ type: "mainShort", now: T0 + 20 * MINUTE }]);
+    const resumed = run(paused, [{ type: "mainShort", now: T0 + 20 * MINUTE }]);
 
-    expect(reset.phase).toBe("ready");
-    expect(reset.deadline).toBeNull();
-    expect(reset.pausedAt).toBeNull();
-    expect(displayMs(reset, T0 + 20 * MINUTE)).toBe(ROUND_MS);
+    const frozen = ROUND_MS - (2 * MINUTE + 34 * SECOND);
+
+    expect(resumed.phase).toBe("running");
+    expect(resumed.deadline).toBe(T0 + 20 * MINUTE + frozen);
+    expect(resumed.deadline).not.toBe(T0 + 20 * MINUTE + ROUND_MS);
+    expect(displayMs(resumed, T0 + 20 * MINUTE)).toBe(frozen);
   });
 
   it("acknowledges from FINISHED back to READY", () => {
@@ -130,12 +132,12 @@ describe("the Main label", () => {
 
     expect(mainLabel(initialRoundState)).toBe("Start");
     expect(mainLabel(started())).toBe("Pause");
-    expect(mainLabel(paused)).toBe("Reset");
+    expect(mainLabel(paused)).toBe("Resume");
     expect(mainLabel(finished)).toBe("Reset");
   });
 });
 
-describe("pause, then reset", () => {
+describe("pause and resume", () => {
   it("freezes the exact remainder while paused", () => {
     const paused = run(started(), [
       { type: "mainShort", now: T0 + 2 * MINUTE + 34 * SECOND },
@@ -151,18 +153,95 @@ describe("pause, then reset", () => {
     );
   });
 
-  it("restores the whole session from PAUSED, preserving mode and option", () => {
+  it("continues from the frozen remainder after resuming", () => {
+    const paused = run(started(), [
+      { type: "mainShort", now: T0 + 2 * MINUTE + 34 * SECOND },
+    ]);
+    const resumedAt = T0 + 30 * MINUTE;
+    const resumed = run(paused, [{ type: "mainShort", now: resumedAt }]);
+
+    expect(displayMs(resumed, resumedAt)).toBe(
+      ROUND_MS - (2 * MINUTE + 34 * SECOND),
+    );
+    expect(displayMs(resumed, resumedAt + SECOND)).toBe(
+      ROUND_MS - (2 * MINUTE + 35 * SECOND),
+    );
+  });
+
+  it("preserves mode and option across pause and resume", () => {
     const chosen = selectOption(selectMode(initialRoundState, 3), 2);
 
     expect(selectionLabel(chosen)).toBe("4c");
 
     const running = run(chosen, [{ type: "mainShort", now: T0 + MINUTE }]);
     const paused = run(running, [{ type: "mainShort", now: T0 + 2 * MINUTE }]);
-    const reset = run(paused, [{ type: "mainShort", now: T0 + 10 * MINUTE }]);
+    const resumed = run(paused, [{ type: "mainShort", now: T0 + 10 * MINUTE }]);
 
-    expect(reset.phase).toBe("ready");
-    expect(selectionLabel(reset)).toBe("4c");
-    expect(displayMs(reset, T0 + 10 * MINUTE)).toBe(roundDurationMs(3));
+    expect(resumed.phase).toBe("running");
+    expect(selectionLabel(resumed)).toBe("4c");
+    expect(displayMs(resumed, T0 + 10 * MINUTE)).toBe(
+      roundDurationMs(3) - MINUTE,
+    );
+  });
+
+  it("loses and gains no milliseconds across a pause and resume", () => {
+    const first = started(T0);
+    const pausedAt = T0 + 137_419; // deliberately not on a second boundary
+    const paused = run(first, [{ type: "mainShort", now: pausedAt }]);
+    const frozen = (paused.deadline ?? 0) - pausedAt;
+
+    expect(frozen).toBe(300_000 - 137_419);
+
+    const resumedAt = T0 + 9_137_419;
+    const resumed = run(paused, [{ type: "mainShort", now: resumedAt }]);
+
+    // The new deadline carries the exact frozen remainder, to the millisecond.
+    expect(resumed.deadline).toBe(resumedAt + frozen);
+    // And the display neither jumps nor rounds into a gain.
+    expect(displayMs(resumed, resumedAt)).toBe(displayMs(paused, resumedAt));
+    expect(formatRemaining(displayMs(resumed, resumedAt))).toBe("2:43");
+    expect(formatRemaining(displayMs(paused, resumedAt))).toBe("2:43");
+  });
+});
+
+describe("a short press that spans a timer state change", () => {
+  it("is ignored when the phase has already moved on", () => {
+    const running = started();
+    const finished = run(running, [{ type: "tick", now: T0 + ROUND_MS }]);
+
+    const afterStalePress = run(finished, [
+      { type: "mainShort", now: T0 + ROUND_MS + 1, fromPhase: "running" },
+    ]);
+
+    expect(afterStalePress).toEqual(finished);
+  });
+
+  it("cannot resume a session paused by another input", () => {
+    const paused = run(started(), [{ type: "mainShort", now: T0 + MINUTE }]);
+
+    const afterStalePress = run(paused, [
+      { type: "mainShort", now: T0 + 2 * MINUTE, fromPhase: "running" },
+    ]);
+
+    expect(afterStalePress).toEqual(paused);
+  });
+
+  it("still applies when the phase is unchanged", () => {
+    const running = started();
+
+    const paused = run(running, [
+      { type: "mainShort", now: T0 + MINUTE, fromPhase: "running" },
+    ]);
+
+    expect(paused.phase).toBe("paused");
+  });
+
+  it("does not restrict an untracked press", () => {
+    const paused = run(started(), [{ type: "mainShort", now: T0 + MINUTE }]);
+
+    const resumed = run(paused, [{ type: "mainShort", now: T0 + 2 * MINUTE }]);
+
+    expect(resumed.phase).toBe("running");
   });
 });
 

@@ -1,4 +1,10 @@
-import { useEffect, useReducer, useState, type MouseEvent } from "react";
+import {
+  useEffect,
+  useReducer,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+} from "react";
 import { formatRemaining } from "./timer";
 import { createPressRecogniser, type PressRecogniser } from "./press";
 import {
@@ -12,6 +18,7 @@ import {
   selectionLabel,
 } from "./round";
 import { useGamepadInput, type GamepadStatus } from "./useGamepadInput";
+import { MAIN_BUTTON_HOLD_MS, MODE_BUTTON_HOLD_MS } from "./gamepad";
 import "./App.css";
 
 /**
@@ -23,7 +30,8 @@ const TICK_MS = 250;
 
 const GAMEPAD_STATUS_TEXT: Record<GamepadStatus, string> = {
   connected: "Controller connected",
-  waiting: "Controller: press a button to connect",
+  waiting: "Waiting for controller input",
+  disconnected: "Controller disconnected",
   unsupported: "Controller: not available in this browser",
 };
 
@@ -39,13 +47,23 @@ function App() {
    *
    * The display clock is refreshed with the same reading that drives the
    * action, so a new deadline is always rendered against the instant it was
-   * built from. Without this, the first frame after Start would show the time
-   * left as measured from an older clock reading.
+   * built from. Without this, the first frame after Start or Resume would show
+   * the time left as measured from an older clock reading.
+   *
+   * `fromPhase` is supplied by the physical button, which can be held across a
+   * timer transition. The reducer refuses the action if the phase has moved on.
    */
-  const mainShort = () => {
+  const mainShort = (fromPhase?: string) => {
     const reading = Date.now();
     setNow(reading);
-    dispatch({ type: "mainShort", now: reading });
+    dispatch({ type: "mainShort", now: reading, fromPhase });
+  };
+
+  /** Full-session reset, shared by a hold on either input. */
+  const mainLong = () => {
+    const reading = Date.now();
+    setNow(reading);
+    dispatch({ type: "mainLong", now: reading });
   };
 
   /*
@@ -58,11 +76,12 @@ function App() {
    */
   const [mainPress] = useState(() =>
     createPressRecogniser({
+      // Same threshold as the green arcade button, so a deliberate hold resets
+      // from either input at the same point.
+      longPressMs: MAIN_BUTTON_HOLD_MS,
       onPress: (kind) => {
         if (kind === "long") {
-          const reading = Date.now();
-          setNow(reading);
-          dispatch({ type: "mainLong", now: reading });
+          mainLong();
         } else {
           mainShort();
         }
@@ -72,24 +91,29 @@ function App() {
 
   const [modePress] = useState(() =>
     createPressRecogniser({
+      // Same threshold as the white arcade button, so the on-screen control and
+      // the hardware distinguish a short press from a hold identically.
+      longPressMs: MODE_BUTTON_HOLD_MS,
       onPress: (kind) => {
-        // The on-screen Mode control keeps its original mapping: short cycles
-        // the main mode, long cycles the option within it.
-        dispatch({ type: kind === "long" ? "modeLong" : "modeShort" });
+        // Mirrors the physical white button: short press cycles the option
+        // within the current mode; a hold cycles the main mode.
+        dispatch({ type: kind === "long" ? "modeShort" : "modeLong" });
       },
     }),
   );
 
   /*
-   * The arcade panel's white button inverts that mapping, as agreed: short
-   * press cycles the option, an 800 ms hold cycles the main mode. Both reuse
-   * the reducer actions above rather than duplicating timer or selection logic.
+   * Arcade panel. The green button's short action and hold reset reuse the same
+   * handlers as the screen; the white button cycles options on a short press
+   * and main modes on a hold.
    */
-  const gamepadStatus = useGamepadInput({
+  const gamepad = useGamepadInput({
     onMain: mainShort,
+    onMainHold: mainLong,
     onOption: () => dispatch({ type: "modeLong" }),
     onMode: () => dispatch({ type: "modeShort" }),
     selectionEnabled: modeActive,
+    stateKey: state.phase,
   });
 
   useEffect(() => {
@@ -169,6 +193,8 @@ function App() {
           <button
             type="button"
             aria-describedby="main-hint"
+            data-main-held={gamepad.mainPressed ? "true" : undefined}
+            style={mainHoldStyle(gamepad.mainHoldProgress)}
             {...pressHandlers(mainPress)}
           >
             {mainLabel(state)}
@@ -193,9 +219,7 @@ function App() {
             Mode
           </button>
           <span className="timer__hint" id="mode-hint">
-            {modeActive
-              ? "Hold for options"
-              : "Unavailable until the round ends"}
+            {modeActive ? "Hold for mode" : "Unavailable until the round ends"}
           </span>
         </div>
       </div>
@@ -206,17 +230,27 @@ function App() {
       */}
       <footer className="timer__gamepad">
         <p
-          className={`timer__gamepad-status timer__gamepad-status--${gamepadStatus}`}
+          className={`timer__gamepad-status timer__gamepad-status--${gamepad.status}`}
         >
-          {GAMEPAD_STATUS_TEXT[gamepadStatus]}
+          {GAMEPAD_STATUS_TEXT[gamepad.status]}
         </p>
-        <p className="timer__gamepad-hint">Green: Start / Pause / Reset</p>
+        <p className="timer__gamepad-hint">
+          Green: Start / Pause / Resume · Hold to reset
+        </p>
         <p className="timer__gamepad-hint">
           White: Press for option · Hold for mode
         </p>
       </footer>
     </main>
   );
+}
+
+/**
+ * A CSS custom property drives the fill inside the Main button, so the hold
+ * progress is visible without adding an element or shifting the layout.
+ */
+function mainHoldStyle(progress: number): CSSProperties {
+  return { "--main-hold": `${Math.round(progress * 100)}%` } as CSSProperties;
 }
 
 /**

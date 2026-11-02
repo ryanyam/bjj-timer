@@ -2,7 +2,7 @@ import { StrictMode } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
-import { LONG_PRESS_MS } from "./press";
+import { MAIN_BUTTON_HOLD_MS, MODE_BUTTON_HOLD_MS } from "./gamepad";
 
 /**
  * Spec for the two-button operator interface in src/App.tsx.
@@ -21,7 +21,7 @@ const START = Date.UTC(2026, 0, 1, 0, 0, 0);
 const SECOND = 1_000;
 const MINUTE = 60 * SECOND;
 
-const MAIN_LABELS = ["Start", "Pause", "Reset"];
+const MAIN_LABELS = ["Start", "Pause", "Resume", "Reset"];
 
 function clockText(): string {
   return screen.getByRole("timer").textContent ?? "";
@@ -76,9 +76,9 @@ function shortPress(button: HTMLElement): void {
 }
 
 /** Held to the threshold: the long action fires while the button is still down. */
-function longPress(button: HTMLElement): void {
+function longPress(button: HTMLElement, holdMs = MAIN_BUTTON_HOLD_MS): void {
   fireEvent.pointerDown(button);
-  advance(LONG_PRESS_MS);
+  advance(holdMs);
   fireEvent.pointerUp(button);
 }
 
@@ -94,8 +94,9 @@ function pressModeShort(): void {
   shortPress(modeButton());
 }
 
+/** The white hardware button's hold threshold, which the on-screen Mode shares. */
 function pressModeLong(): void {
-  longPress(modeButton());
+  longPress(modeButton(), MODE_BUTTON_HOLD_MS);
 }
 
 function blurWindow(): void {
@@ -149,7 +150,7 @@ describe("a running round", () => {
 
     // Held for 599 ms, then released: still a short press, so it starts.
     fireEvent.pointerDown(main);
-    advance(LONG_PRESS_MS - 1);
+    advance(MAIN_BUTTON_HOLD_MS - 1);
     fireEvent.pointerUp(main);
 
     expect(mainLabelText()).toBe("Pause");
@@ -225,7 +226,7 @@ describe("resetting", () => {
 
   it("resets from RUNNING, keeping the selected mode", () => {
     render(<App />);
-    pressModeShort();
+    pressModeLong();
     pressMainShort();
     advance(2 * MINUTE);
 
@@ -241,7 +242,7 @@ describe("resetting", () => {
     pressMainShort();
     advance(1 * MINUTE);
     pressMainShort();
-    expect(mainLabelText()).toBe("Reset");
+    expect(mainLabelText()).toBe("Resume");
 
     pressMainLong();
 
@@ -287,10 +288,10 @@ describe("the Main button label", () => {
     expect(mainLabelText()).toBe("Pause");
 
     pressMainShort();
-    expect(mainLabelText()).toBe("Reset");
+    expect(mainLabelText()).toBe("Resume");
 
     pressMainShort();
-    expect(mainLabelText()).toBe("Start");
+    expect(mainLabelText()).toBe("Pause");
   });
 
   it("stays enabled while a round is running, so a long hold still works", () => {
@@ -309,7 +310,7 @@ describe("the Main button label", () => {
   });
 });
 
-describe("pause and reset", () => {
+describe("pause and resume", () => {
   it("freezes the clock while paused", () => {
     render(<App />);
     pressMainShort();
@@ -321,15 +322,61 @@ describe("pause and reset", () => {
     expect(clockText()).toBe("4:00");
   });
 
-  it("resets to the full round from PAUSED, without resuming", () => {
+  it("resumes from the frozen time instead of restarting the round", () => {
     render(<App />);
     pressMainShort();
     advance(1 * MINUTE);
     pressMainShort();
     advance(10 * MINUTE);
 
-    expect(mainLabelText()).toBe("Reset");
     pressMainShort();
+
+    expect(clockText()).toBe("4:00");
+
+    advance(1 * SECOND);
+
+    expect(clockText()).toBe("3:59");
+  });
+
+  it("does not reset the session on a paused short press", () => {
+    render(<App />);
+    pressMainShort();
+    advance(1 * MINUTE);
+    pressMainShort();
+    advance(10 * MINUTE);
+
+    expect(mainLabelText()).toBe("Resume");
+    pressMainShort();
+
+    expect(mainLabelText()).toBe("Pause");
+    expect(clockText()).toBe("4:00");
+    expect(vi.getTimerCount()).toBe(1);
+  });
+});
+
+describe("holding Main to reset", () => {
+  it("waits for 1,500 ms before resetting", () => {
+    render(<App />);
+    pressMainShort();
+    advance(1 * MINUTE);
+
+    fireEvent.pointerDown(mainButton());
+    advance(MAIN_BUTTON_HOLD_MS - 1);
+    expect(clockText()).toBe("3:59");
+
+    advance(1);
+    expect(clockText()).toBe("5:00");
+
+    fireEvent.pointerUp(mainButton());
+    expect(mainLabelText()).toBe("Start");
+  });
+
+  it("does not start from READY when a hold is released", () => {
+    render(<App />);
+
+    fireEvent.pointerDown(mainButton());
+    advance(MAIN_BUTTON_HOLD_MS);
+    fireEvent.pointerUp(mainButton());
 
     expect(mainLabelText()).toBe("Start");
     expect(clockText()).toBe("5:00");
@@ -370,17 +417,17 @@ describe("one press, one action", () => {
     expect(mainLabelText()).toBe("Pause");
 
     fireEvent.click(mainButton(), { detail: 0 });
-    expect(mainLabelText()).toBe("Reset");
+    expect(mainLabelText()).toBe("Resume");
 
     fireEvent.click(mainButton(), { detail: 0 });
-    expect(mainLabelText()).toBe("Start");
+    expect(mainLabelText()).toBe("Pause");
   });
 
   it("does not fire the long action for a keypress, however long it is held", () => {
     render(<App />);
 
     fireEvent.click(mainButton(), { detail: 0 });
-    advance(10 * LONG_PRESS_MS);
+    advance(10 * MAIN_BUTTON_HOLD_MS);
 
     expect(mainLabelText()).toBe("Pause");
   });
@@ -392,11 +439,11 @@ describe("abandoning a press", () => {
     const main = mainButton();
 
     fireEvent.pointerDown(main);
-    advance(LONG_PRESS_MS / 2);
+    advance(MAIN_BUTTON_HOLD_MS / 2);
     // React derives pointerleave from pointerout, so that is what a browser
     // moving the cursor off the button produces.
     fireEvent.pointerOut(main);
-    advance(10 * LONG_PRESS_MS);
+    advance(10 * MAIN_BUTTON_HOLD_MS);
     fireEvent.pointerUp(main);
 
     expect(mainLabelText()).toBe("Start");
@@ -408,9 +455,9 @@ describe("abandoning a press", () => {
     const main = mainButton();
 
     fireEvent.pointerDown(main);
-    advance(LONG_PRESS_MS / 2);
+    advance(MAIN_BUTTON_HOLD_MS / 2);
     fireEvent.pointerCancel(main);
-    advance(10 * LONG_PRESS_MS);
+    advance(10 * MAIN_BUTTON_HOLD_MS);
     fireEvent.pointerUp(main);
 
     expect(mainLabelText()).toBe("Start");
@@ -422,9 +469,9 @@ describe("abandoning a press", () => {
     const main = mainButton();
 
     fireEvent.pointerDown(main);
-    advance(LONG_PRESS_MS / 2);
+    advance(MAIN_BUTTON_HOLD_MS / 2);
     blurWindow();
-    advance(10 * LONG_PRESS_MS);
+    advance(10 * MAIN_BUTTON_HOLD_MS);
     fireEvent.pointerUp(main);
 
     expect(mainLabelText()).toBe("Start");
@@ -435,14 +482,14 @@ describe("abandoning a press", () => {
     const { unmount } = render(<App />);
 
     fireEvent.pointerDown(mainButton());
-    advance(LONG_PRESS_MS / 2);
+    advance(MAIN_BUTTON_HOLD_MS / 2);
 
     unmount();
 
     // Without cancelling on unmount, the pending hold would still be scheduled.
     expect(vi.getTimerCount()).toBe(0);
 
-    advance(10 * LONG_PRESS_MS);
+    advance(10 * MAIN_BUTTON_HOLD_MS);
 
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -455,13 +502,13 @@ describe("the Mode button", () => {
     expect(modeText()).toBe("Mode 1");
   });
 
-  it("cycles the top-level modes 1 -> 2 -> 3 -> 4 -> 5 -> 1", () => {
+  it("cycles the main modes 1 -> 2 -> 3 -> 4 -> 5 -> 1 on a hold", () => {
     render(<App />);
 
     const seen = [modeText()];
 
     for (let press = 0; press < 5; press += 1) {
-      pressModeShort();
+      pressModeLong();
       seen.push(modeText());
     }
 
@@ -475,28 +522,53 @@ describe("the Mode button", () => {
     ]);
   });
 
-  it("cycles the options within a mode on a long press", () => {
+  it("does nothing on a short press in mode 1, which has no options", () => {
     render(<App />);
+
     pressModeShort();
+
+    expect(modeText()).toBe("Mode 1");
+  });
+
+  it("cycles the options within a mode on a short press, wrapping", () => {
+    render(<App />);
+
+    // A hold reaches mode 2, whose options are 2, 2b, 2c.
+    pressModeLong();
     expect(modeText()).toBe("Mode 2");
 
-    pressModeLong();
+    pressModeShort();
     expect(modeText()).toBe("Mode 2b");
 
-    pressModeLong();
+    pressModeShort();
     expect(modeText()).toBe("Mode 2c");
 
-    pressModeLong();
+    pressModeShort();
     expect(modeText()).toBe("Mode 2");
   });
 
-  it("returns to the base selection when the top-level mode changes", () => {
+  it("switches modes at 800 ms, the same threshold as the white button", () => {
     render(<App />);
-    pressModeShort();
+
+    fireEvent.pointerDown(modeButton());
+    advance(MODE_BUTTON_HOLD_MS - 1);
+    expect(modeText()).toBe("Mode 1");
+
+    advance(1);
+    expect(modeText()).toBe("Mode 2");
+
+    // Releasing after the hold must not also cycle the option.
+    fireEvent.pointerUp(modeButton());
+    expect(modeText()).toBe("Mode 2");
+  });
+
+  it("returns to the base selection when the main mode changes", () => {
+    render(<App />);
     pressModeLong();
+    pressModeShort();
     expect(modeText()).toBe("Mode 2b");
 
-    pressModeShort();
+    pressModeLong();
 
     expect(modeText()).toBe("Mode 3");
   });
@@ -506,7 +578,7 @@ describe("the Mode button", () => {
 
     expect(screen.queryByText(/placeholder/i)).toBeNull();
 
-    pressModeShort();
+    pressModeLong();
 
     expect(screen.getByText(/placeholder/i)).toBeTruthy();
     expect(modeText()).toBe("Mode 2");
@@ -539,7 +611,7 @@ describe("the Mode button", () => {
     pressMainShort();
     advance(5 * MINUTE);
 
-    pressModeShort();
+    pressModeLong();
 
     expect(modeText()).toBe("Mode 2");
   });
@@ -563,11 +635,18 @@ describe("the round reference", () => {
 
     pressMainShort();
     advance(10 * MINUTE);
-    expect(mainLabelText()).toBe("Reset");
+    expect(mainLabelText()).toBe("Resume");
     expect(clockText()).toBe("3:00");
     expect(durationText()).toBe("Round: 5:00");
 
     pressMainShort();
+    expect(mainLabelText()).toBe("Pause");
+    expect(clockText()).toBe("3:00");
+    advance(1 * SECOND);
+    expect(clockText()).toBe("2:59");
+    expect(durationText()).toBe("Round: 5:00");
+
+    pressMainLong();
     expect(mainLabelText()).toBe("Start");
     expect(clockText()).toBe("5:00");
     expect(durationText()).toBe("Round: 5:00");
@@ -579,9 +658,9 @@ describe("the round reference", () => {
     // Every placeholder mode currently shares five minutes, so the text cannot
     // differ between modes yet. What this pins is that the reference still reads
     // the configured length once the selection has moved.
-    pressModeShort();
-    pressModeShort();
-    pressModeShort();
+    pressModeLong();
+    pressModeLong();
+    pressModeLong();
 
     expect(modeText()).toBe("Mode 4");
     expect(durationText()).toBe("Round: 5:00");
@@ -600,7 +679,7 @@ describe("the button hints", () => {
     render(<App />);
 
     expect(screen.getByText("Hold to reset")).toBeTruthy();
-    expect(screen.getByText("Hold for options")).toBeTruthy();
+    expect(screen.getByText("Hold for mode")).toBeTruthy();
   });
 
   it("associates each hint with its button for assistive technology", () => {
@@ -614,7 +693,7 @@ describe("the button hints", () => {
     render(<App />);
     pressMainShort();
 
-    expect(screen.queryByText("Hold for options")).toBeNull();
+    expect(screen.queryByText("Hold for mode")).toBeNull();
     expect(screen.getByText("Unavailable until the round ends")).toBeTruthy();
     // Main's own hint is unaffected.
     expect(screen.getByText("Hold to reset")).toBeTruthy();
@@ -625,7 +704,7 @@ describe("the button hints", () => {
     pressMainShort();
     pressMainShort();
 
-    expect(screen.queryByText("Hold for options")).toBeNull();
+    expect(screen.queryByText("Hold for mode")).toBeNull();
     expect(screen.getByText("Unavailable until the round ends")).toBeTruthy();
   });
 
@@ -634,7 +713,7 @@ describe("the button hints", () => {
     pressMainShort();
     advance(5 * MINUTE);
 
-    expect(screen.getByText("Hold for options")).toBeTruthy();
+    expect(screen.getByText("Hold for mode")).toBeTruthy();
     expect(screen.queryByText("Unavailable until the round ends")).toBeNull();
   });
 
@@ -649,7 +728,7 @@ describe("the button hints", () => {
 describe("the placeholder note", () => {
   it("does not repeat the countdown and does not move as the clock runs", () => {
     render(<App />);
-    pressModeShort();
+    pressModeLong();
 
     const note = screen.getByText(/placeholder/i).textContent ?? "";
 

@@ -49,8 +49,14 @@ export interface RoundState {
 }
 
 export type RoundAction =
-  /** Main short press, at the clock reading `now`. */
-  | { type: "mainShort"; now: number }
+  /**
+   * Main short press, at the clock reading `now`.
+   *
+   * `fromPhase` is set by input that tracks a press across time (the physical
+   * green button). If the timer has moved to another phase by the time the
+   * action is reduced, the action is ignored rather than reinterpreted.
+   */
+  | { type: "mainShort"; now: number; fromPhase?: string }
   /** Main long press, at the clock reading `now`. */
   | { type: "mainLong"; now: number }
   | { type: "modeShort" }
@@ -94,9 +100,8 @@ export function isPlaceholderMode(state: RoundState): boolean {
 /**
  * The visible Main label, which always names the next short-press action.
  *
- * PAUSED and FINISHED both lead to a reset, so both say "Reset". The agreed
- * physical sequence is Start -> Pause -> Reset -> Start; the pause state still
- * freezes the clock for the operator to read.
+ * PAUSED resumes the frozen session; only a hold (or FINISHED's short press)
+ * leads to a reset.
  */
 export function mainLabel(state: RoundState): string {
   switch (state.phase) {
@@ -105,7 +110,7 @@ export function mainLabel(state: RoundState): string {
     case "running":
       return "Pause";
     case "paused":
-      return "Reset";
+      return "Resume";
     case "finished":
       return "Reset";
   }
@@ -140,7 +145,7 @@ export function displayMs(state: RoundState, now: number): number {
 export function reduce(state: RoundState, action: RoundAction): RoundState {
   switch (action.type) {
     case "mainShort":
-      return onMainShort(state, action.now);
+      return onMainShort(state, action.now, action.fromPhase);
 
     case "mainLong":
       // Reset from ANY state, including RUNNING and PAUSED. The selected mode
@@ -173,7 +178,17 @@ export function reduce(state: RoundState, action: RoundAction): RoundState {
   }
 }
 
-function onMainShort(state: RoundState, now: number): RoundState {
+function onMainShort(
+  state: RoundState,
+  now: number,
+  fromPhase?: string,
+): RoundState {
+  // A tracked press that began in another phase is stale: the timer changed
+  // underneath it, so it must not be reinterpreted for the new state.
+  if (fromPhase !== undefined && fromPhase !== state.phase) {
+    return state;
+  }
+
   switch (state.phase) {
     case "ready":
       return {
@@ -188,14 +203,27 @@ function onMainShort(state: RoundState, now: number): RoundState {
       return { ...state, phase: "paused", pausedAt: now };
 
     case "paused":
-      // The agreed sequence is Start -> Pause -> Reset -> Start. A paused main
-      // press abandons the round and returns to the initial READY state,
-      // keeping the selected mode and option. It does NOT resume.
-      return resetSession(state);
+      // Resume builds a NEW deadline from the frozen remainder, so the session
+      // continues where it stopped instead of restarting a full round.
+      return {
+        ...state,
+        phase: "running",
+        deadline: now + frozenRemaining(state),
+        pausedAt: null,
+      };
 
     case "finished":
       return resetSession(state);
   }
+}
+
+/** Only meaningful while paused. */
+function frozenRemaining(state: RoundState): number {
+  if (state.deadline === null || state.pausedAt === null) {
+    return 0;
+  }
+
+  return remainingMs(state.deadline, state.pausedAt);
 }
 
 /**

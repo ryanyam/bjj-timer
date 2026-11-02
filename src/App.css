@@ -106,7 +106,13 @@
   border: 2px solid var(--border);
   border-radius: 0.5rem;
   color: var(--accent);
-  background: var(--accent-bg);
+  /* At rest --main-hold is 0%, so this is exactly --accent-bg. During a
+     physical press the fill grows to show progress towards reset. */
+  background: linear-gradient(
+    to right,
+    var(--accent-border) var(--main-hold, 0%),
+    var(--accent-bg) var(--main-hold, 0%)
+  );
   cursor: pointer;
   transition: border-color 0.3s;
 
@@ -122,6 +128,13 @@
    button is held and disappears on release or cancellation; it does not change
    when an action fires, which is still on release. */
 .timer__controls button:active:not([aria-disabled="true"]) {
+  border-color: var(--accent);
+  transform: translateY(1px);
+}
+
+/* The green physical button is down: echo the same pressed look on screen,
+   even when the on-screen button itself is not being touched. */
+.timer__controls button[data-main-held="true"] {
   border-color: var(--accent);
   transform: translateY(1px);
 }

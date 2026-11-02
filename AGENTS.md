@@ -1,10 +1,13 @@
 # BJJ Timer — agent instructions
 
-## Purpose
+## Objective
 
-Build a reliable, offline-first BJJ gym timer. Develop and test it in
-a browser on Mac first; deploy it later on a Raspberry Pi in kiosk mode.
-Non-technical gym staff must be able to operate the finished device.
+Complete the BJJ Timer as a reliable, usable, offline-first application.
+Develop and test it in a browser on Mac first; deploy it later on a
+Raspberry Pi in kiosk mode. The owner is not learning to code, and
+non-technical gym staff must be able to operate the finished device.
+Prioritize working results, low total API cost, and minimal owner
+intervention.
 
 ## Source of truth
 
@@ -21,7 +24,9 @@ Non-technical gym staff must be able to operate the finished device.
 - Keep the runtime usable offline. Do not add a backend, database,
   login, cloud sync, analytics, or an AI dependency.
 - Do not add packages or change the architecture without approval.
-- Prefer focused changes to rewrites. Preserve working behavior.
+- Prefer focused changes to rewrites. Preserve working behavior and
+  avoid unrelated refactors, dependency upgrades, and new frameworks.
+- Complete one feature or closely related batch per task.
 
 ## Product constraints
 
@@ -49,28 +54,54 @@ Non-technical gym staff must be able to operate the finished device.
 - Do not change the meaning of Start, Reset, Pause, or Mode silently;
   call out a proposed behavior change before implementing it.
 
-## How to work
+## Execution
 
-1. Inspect only the files relevant to the request and summarize the
-   intended change in 3–5 bullets. Mention decisions I must make.
-2. If the task has unclear UX, significant architectural impact,
-   new dependencies, or hardware/system effects, stop for approval.
-   For a clear, small, reversible request, proceed after the brief
-   plan without waiting for a second "yes".
-3. Implement only the agreed scope. Add or update tests when behavior
-   changes; prefer focused tests over large snapshots.
-4. Run `npm test`, `npm run lint`, and `npm run build` after code
-   changes. Report failures honestly; never claim checks were run
-   when they were not.
-5. Tell me the files changed, results of the checks, a short manual
-   browser test, and one thing I should understand about the change.
+- For clear requests, inspect the relevant code, implement, and verify.
+  Give a brief plan (3–5 bullets) inline, but do not stop after a plan
+  unless approval is genuinely needed.
+- Make reasonable, reversible implementation decisions yourself.
+- Stop for approval when the task has unclear UX, significant
+  architectural impact, new dependencies, or hardware/system effects.
+- Ask questions only when missing information materially affects
+  user-visible behavior, data safety, security, or scope. Ask one
+  focused question rather than making a broad guess.
+
+## Context and cost
+
+- Read relevant files on demand; avoid dumping the whole repository.
+- Do not read generated files, dependency folders, or large logs
+  unless needed for the specific issue.
+- Keep plans, progress updates, and final summaries concise. Do not
+  provide tutorials or reproduce full source files in chat.
+- Do not delegate routine tasks to multiple agents.
+
+## Verification
+
+- Use the repository's existing check commands: `npm test`,
+  `npm run lint`, and `npm run build`. Discover and use others if the
+  project adds them.
+- Add or update tests when behavior changes; prefer focused tests over
+  large snapshots.
+- Fix regressions introduced by your changes.
+- Never claim a check, browser test, or device test was performed
+  unless it was. Report failures honestly.
+- After two unsuccessful fixes for the same underlying issue, stop
+  repeating the approach. Summarize the evidence and the blocker.
 
 ## Safety and Git
 
 - Never include API keys, credentials, or `.env` contents in output,
-  source control, or documentation.
+  source control, or documentation. Do not read unrelated personal files.
 - Do not commit, push, delete files, or make destructive Git changes
-  without my explicit approval.
+  without explicit approval.
+- Ask before destructive commands, deployment, paid services, major
+  dependency changes, or publishing to a remote repository.
 - Do not overwrite unrelated uncommitted changes.
-- If an instruction is uncertain, ask one focused question rather
-  than making a broad guess.
+
+## Final response
+
+Provide only:
+
+1. What changed.
+2. Checks run and their results.
+3. Any remaining blocker or required manual check, plus one thing the owner should understand about the change.

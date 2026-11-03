@@ -652,6 +652,28 @@ describe("the Mode button and keyboard selection", () => {
     expect(clockText()).toBe("2:00");
   });
 
+  it("flashes each mode as one single-line message", () => {
+    render(<App />);
+
+    selectMode("DRILLS");
+    advance(0);
+    expect(document.querySelector(".mode-flash")?.textContent).toBe(
+      "MODE: DRILLS",
+    );
+
+    advance(1_000);
+    selectMode("KIDS");
+    advance(0);
+    expect(document.querySelector(".mode-flash")?.textContent).toBe("MODE: KIDS");
+
+    advance(1_000);
+    selectMode("ROLLS");
+    advance(0);
+    expect(document.querySelector(".mode-flash")?.textContent).toBe(
+      "MODE: ROLLS",
+    );
+  });
+
   it("flashes the new mode name and beeps once on a mode change", () => {
     render(<App />);
 

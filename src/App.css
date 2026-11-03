@@ -460,7 +460,12 @@
   top: 50%;
   left: 50%;
   z-index: 10;
-  padding: 0.18em 0.5em;
+  display: block;
+  width: max-content;
+  max-width: none;
+  height: auto;
+  min-height: 0;
+  padding: 0.22em 0.65em;
   border: 2px solid var(--ink);
   background: var(--gold);
   color: var(--ink);
@@ -469,6 +474,7 @@
   letter-spacing: 0.06em;
   line-height: 1;
   text-transform: uppercase;
+  white-space: nowrap;
   pointer-events: none;
   transform: translate(-50%, -50%);
 }

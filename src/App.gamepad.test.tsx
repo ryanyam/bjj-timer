@@ -5,10 +5,15 @@ import { MAIN_BUTTON_HOLD_MS, MODE_BUTTON_HOLD_MS } from "./gamepad";
 
 vi.mock("./audio", () => ({
   unlockAudio: vi.fn(),
+  initializeAudio: vi.fn(() => Promise.resolve(true)),
+  onAudioUnavailable: vi.fn(() => vi.fn()),
   playWorkStart: vi.fn(),
   playRestStart: vi.fn(),
   playModeChange: vi.fn(),
-  scheduleGetReadyCues: vi.fn(() => vi.fn()),
+  playPause: vi.fn(),
+  playResume: vi.fn(),
+  playPresetChange: vi.fn(),
+  playReset: vi.fn(),
 }));
 
 import { playWorkStart } from "./audio";

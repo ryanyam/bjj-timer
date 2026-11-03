@@ -944,3 +944,11 @@
     font-size: 0.65rem;
   }
 }
+
+.sound-warning {
+  margin: 0;
+  color: var(--red);
+  font-size: clamp(0.65rem, 1.2vh, 0.9rem);
+  font-weight: 700;
+  line-height: 1.2;
+}

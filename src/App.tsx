@@ -34,10 +34,15 @@ import { PhaseProgressBar } from "./PhaseProgressBar";
 import { LiveClock } from "./LiveClock";
 import logoUrl from "./assets/alliance-jiu-jitsu-manila.jpg";
 import {
+  initializeAudio,
+  onAudioUnavailable,
   playModeChange,
+  playPause,
+  playPresetChange,
+  playReset,
   playRestStart,
+  playResume,
   playWorkStart,
-  scheduleGetReadyCues,
   unlockAudio,
 } from "./audio";
 import { useGamepadInput } from "./useGamepadInput";
@@ -65,6 +70,7 @@ function App() {
   const [notice, setNotice] = useState<string | null>(null);
   const [modeFlash, setModeFlash] = useState<string | null>(null);
   const [resetFlash, setResetFlash] = useState(false);
+  const [soundUnavailable, setSoundUnavailable] = useState(false);
 
   const mode = currentMode(state);
   const preset = currentPreset(state);
@@ -220,8 +226,8 @@ function App() {
     const reading = Date.now();
     setNow(reading);
     dispatch({ type: "mainLong", now: reading });
-
     setResetFlash(true);
+    playReset();
   };
 
   const cyclePreset = () => {
@@ -331,12 +337,8 @@ function App() {
    * once, so no burst of obsolete cues is played.
    */
   const previousTransitionSeq = useRef(state.transitionSeq);
-  const previousStatus = useRef(state.status);
 
   useEffect(() => {
-    const wasGetReady = previousStatus.current === "getReady";
-    previousStatus.current = state.status;
-
     if (state.transitionSeq === previousTransitionSeq.current) {
       return;
     }
@@ -349,43 +351,55 @@ function App() {
 
     if (state.lastTransition === "rest") {
       playRestStart();
-    } else if (state.lastTransition === "work" && !wasGetReady) {
+    } else if (state.lastTransition === "work") {
       playWorkStart();
     }
   }, [state.transitionSeq, state.status, state.lastTransition]);
 
-  /*
-   * Get Ready ticks/bell are scheduled against the AudioContext clock. On a
-   * natural zero transition the scheduled bell is allowed to play; on cancel
-   * or reset the pending cues are stopped.
-   */
-  const getReadyCancel = useRef<(() => void) | null>(null);
-  const previousAudioStatus = useRef(state.status);
+  const previousPlaybackStatus = useRef(state.status);
 
   useEffect(() => {
-    const wasGetReady = previousAudioStatus.current === "getReady";
-    previousAudioStatus.current = state.status;
+    const previous = previousPlaybackStatus.current;
+    previousPlaybackStatus.current = state.status;
 
-    if (state.status === "getReady" && state.deadline !== null) {
-      const seconds = Math.max(
-        0,
-        Math.ceil((state.deadline - Date.now()) / 1_000),
-      );
-
-      getReadyCancel.current = scheduleGetReadyCues(seconds);
-      return;
+    if (previous === "running" && state.status === "paused") {
+      playPause();
+    } else if (previous === "paused" && state.status === "running") {
+      playResume();
     }
+  }, [state.status]);
 
-    if (wasGetReady && state.status === "ready") {
-      getReadyCancel.current?.();
-      getReadyCancel.current = null;
-    }
-  }, [state.status, state.deadline]);
+  const previousPreset = useRef(presetIndex);
+  const previousPresetMode = useRef(mode.id);
 
   useEffect(() => {
+    const modeChanged = mode.id !== previousPresetMode.current;
+    const presetChanged = presetIndex !== previousPreset.current;
+    previousPresetMode.current = mode.id;
+    previousPreset.current = presetIndex;
+
+    if (presetChanged && !modeChanged) {
+      playPresetChange();
+    }
+  }, [presetIndex, mode.id]);
+
+  useEffect(() => {
+    let active = true;
+    const unsubscribe = onAudioUnavailable(() => {
+      if (active) {
+        setSoundUnavailable(true);
+      }
+    });
+
+    void initializeAudio().then((ok) => {
+      if (active && !ok) {
+        setSoundUnavailable(true);
+      }
+    });
+
     return () => {
-      getReadyCancel.current?.();
-      getReadyCancel.current = null;
+      active = false;
+      unsubscribe();
     };
   }, []);
 
@@ -471,8 +485,6 @@ function App() {
       modePress.cancel();
       clearPointerHoldTimer();
       clearModeHoldTimer();
-      getReadyCancel.current?.();
-      getReadyCancel.current = null;
     };
   }, [
     mainPress,
@@ -729,6 +741,11 @@ function App() {
         <SettingsPanel />
 
         <div className="app-footer__status">
+          {soundUnavailable && (
+            <p className="sound-warning" role="status">
+              Sound unavailable
+            </p>
+          )}
           {controllerError !== null ? (
             <p className="controller-status controller-status--error">
               {controllerError}

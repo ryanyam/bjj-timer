@@ -1,15 +1,14 @@
-/**
- * The two live transition cues.
- *
- * There is no audio settings surface: the cues are deliberately quiet, fixed,
- * and short. Work-start is a pair of high beeps; rest-start is one lower, longer
- * tone, so they are distinguishable without a settings screen.
- *
- * The AudioContext is created lazily and unlocked from a user gesture (Start or
- * a selection press). If the browser refuses, the timer simply runs silently.
- */
+import { CUE_FILES, effectiveGain, type CueName } from "./audioConfig";
 
 let context: AudioContext | null = null;
+const buffers = new Map<CueName, AudioBuffer>();
+const activeBells = new Set<{
+  source: AudioBufferSourceNode;
+  gain: GainNode;
+}>();
+const unavailableListeners = new Set<() => void>();
+let unavailable = false;
+let loadPromise: Promise<boolean> | null = null;
 
 function getContext(): AudioContext | null {
   if (typeof window === "undefined") {
@@ -40,133 +39,168 @@ function getContext(): AudioContext | null {
   }
 }
 
-/** Call synchronously from a click/key/button handler to allow later cues. */
-export function unlockAudio(): void {
-  const audio = getContext();
-
-  if (audio?.state === "suspended") {
-    void audio.resume().catch(() => {});
-  }
-}
-
-function scheduleTone(
-  audio: AudioContext,
-  frequency: number,
-  startOffset: number,
-  duration: number,
-): OscillatorNode {
-  const oscillator = audio.createOscillator();
-  const gain = audio.createGain();
-  const start = audio.currentTime + startOffset;
-
-  oscillator.type = "sine";
-  oscillator.frequency.setValueAtTime(frequency, start);
-
-  // A short attack/decay avoids clicks without making the cue loud.
-  gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.exponentialRampToValueAtTime(0.12, start + 0.01);
-  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-
-  oscillator.connect(gain);
-  gain.connect(audio.destination);
-  oscillator.start(start);
-  oscillator.stop(start + duration + 0.02);
-
-  return oscillator;
-}
-
-function play(cues: readonly (readonly [number, number, number])[]): void {
-  const audio = getContext();
-
-  if (audio === null) {
+function markUnavailable(): void {
+  if (unavailable) {
     return;
   }
 
-  const schedule = () => {
-    for (const [frequency, startOffset, duration] of cues) {
-      scheduleTone(audio, frequency, startOffset, duration);
-    }
-  };
+  unavailable = true;
 
-  if (audio.state === "suspended") {
-    void audio
-      .resume()
-      .then(schedule)
-      .catch(() => {});
-  } else {
-    schedule();
+  for (const listener of unavailableListeners) {
+    listener();
   }
 }
 
-/** Two high beeps: a work round has begun. */
-export function playWorkStart(): void {
-  play([
-    [880, 0, 0.09],
-    [880, 0.14, 0.09],
-  ]);
-}
+/** Observe audio initialization/resume failures for a non-blocking warning. */
+export function onAudioUnavailable(listener: () => void): () => void {
+  unavailableListeners.add(listener);
 
-/** One lower, longer tone: work has ended and rest has begun. */
-export function playRestStart(): void {
-  play([[440, 0, 0.28]]);
-}
+  if (unavailable) {
+    listener();
+  }
 
-/** One short confirmation beep: the main mode has changed. */
-export function playModeChange(): void {
-  play([[660, 0, 0.11]]);
+  return () => unavailableListeners.delete(listener);
 }
 
 /**
- * Get Ready ticks on each of the final three seconds and the existing start
- * cue at zero, all scheduled against the AudioContext clock. The returned
- * function cancels pending ticks/bell when the countdown is abandoned.
+ * Fetch and decode all seven cues once. Buffers stay in memory; playback never
+ * fetches or decodes. Failure marks audio unavailable but never stops the timer.
  */
-export function scheduleGetReadyCues(seconds: number): () => void {
+export function initializeAudio(): Promise<boolean> {
+  if (loadPromise !== null) {
+    return loadPromise;
+  }
+
   const audio = getContext();
 
-  if (audio === null || seconds <= 0) {
-    return () => {};
+  if (audio === null) {
+    markUnavailable();
+    loadPromise = Promise.resolve(false);
+    return loadPromise;
   }
 
-  let cancelled = false;
-  const oscillators: OscillatorNode[] = [];
+  loadPromise = (async () => {
+    try {
+      await Promise.all(
+        (Object.keys(CUE_FILES) as CueName[]).map(async (cue) => {
+          const response = await fetch(CUE_FILES[cue]);
 
-  const schedule = () => {
-    if (cancelled) {
-      return;
+          if (!response.ok) {
+            throw new Error(`Sound failed to load: ${CUE_FILES[cue]}`);
+          }
+
+          const data = await response.arrayBuffer();
+          const buffer = await audio.decodeAudioData(data);
+          buffers.set(cue, buffer);
+        }),
+      );
+
+      return true;
+    } catch {
+      markUnavailable();
+      return false;
     }
+  })();
 
-    for (const offset of [seconds - 3, seconds - 2, seconds - 1]) {
-      if (offset >= 0) {
-        oscillators.push(scheduleTone(audio, 660, offset, 0.07));
-      }
-    }
+  return loadPromise;
+}
 
-    // Use the existing work-start cue as the bell at zero.
-    oscillators.push(scheduleTone(audio, 880, seconds, 0.09));
-    oscillators.push(scheduleTone(audio, 880, seconds + 0.14, 0.09));
-  };
+export function isAudioUnavailable(): boolean {
+  return unavailable;
+}
+
+/** Call synchronously from a press/click handler to allow playback. */
+export function unlockAudio(): void {
+  const audio = getContext();
+
+  if (audio === null) {
+    markUnavailable();
+    return;
+  }
 
   if (audio.state === "suspended") {
-    void audio
-      .resume()
-      .then(schedule)
-      .catch(() => {});
-  } else {
-    schedule();
+    void audio.resume().catch(() => markUnavailable());
+  }
+}
+
+function startCue(cue: CueName, bell: boolean): void {
+  const audio = getContext();
+  const buffer = buffers.get(cue);
+
+  if (audio === null || buffer === undefined) {
+    return;
   }
 
-  return () => {
-    cancelled = true;
+  const gainValue = effectiveGain(cue);
 
-    for (const oscillator of oscillators) {
-      try {
-        oscillator.stop();
-      } catch {
-        // Already stopped.
-      }
+  if (gainValue <= 0) {
+    return;
+  }
+
+  try {
+    const source = audio.createBufferSource();
+    const gain = audio.createGain();
+    source.buffer = buffer;
+    gain.gain.value = gainValue;
+    source.connect(gain);
+    gain.connect(audio.destination);
+
+    const entry = { source, gain };
+
+    if (bell) {
+      activeBells.add(entry);
     }
 
-    oscillators.length = 0;
-  };
+    source.onended = () => {
+      activeBells.delete(entry);
+      source.disconnect();
+      gain.disconnect();
+    };
+
+    source.start(audio.currentTime);
+  } catch {
+    markUnavailable();
+  }
+}
+
+function stopBells(): void {
+  for (const bell of activeBells) {
+    try {
+      bell.source.stop();
+    } catch {
+      // Already stopped.
+    }
+  }
+
+  activeBells.clear();
+}
+
+export function playWorkStart(): void {
+  startCue("round_start", true);
+}
+
+export function playRestStart(): void {
+  startCue("round_end", true);
+}
+
+export function playPause(): void {
+  startCue("pause", false);
+}
+
+export function playResume(): void {
+  startCue("resume", false);
+}
+
+export function playPresetChange(): void {
+  startCue("preset_change", false);
+}
+
+export function playModeChange(): void {
+  startCue("mode_change", false);
+}
+
+/** Reset stops any playing round bell immediately, then plays reset.wav. */
+export function playReset(): void {
+  stopBells();
+  startCue("reset", false);
 }

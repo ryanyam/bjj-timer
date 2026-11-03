@@ -6,17 +6,26 @@ import { MAIN_BUTTON_HOLD_MS, MODE_BUTTON_HOLD_MS } from "./gamepad";
 
 vi.mock("./audio", () => ({
   unlockAudio: vi.fn(),
+  initializeAudio: vi.fn(() => Promise.resolve(true)),
+  onAudioUnavailable: vi.fn(() => vi.fn()),
   playWorkStart: vi.fn(),
   playRestStart: vi.fn(),
   playModeChange: vi.fn(),
-  scheduleGetReadyCues: vi.fn(() => vi.fn()),
+  playPause: vi.fn(),
+  playResume: vi.fn(),
+  playPresetChange: vi.fn(),
+  playReset: vi.fn(),
 }));
 
 import {
+  initializeAudio,
   playModeChange,
+  playPause,
+  playPresetChange,
+  playReset,
   playRestStart,
+  playResume,
   playWorkStart,
-  scheduleGetReadyCues,
 } from "./audio";
 import { resetGetReadySettings, setGetReadySecondsForMode } from "./settings";
 
@@ -40,7 +49,12 @@ const MINUTE = 60 * SECOND;
 
 const workCue = vi.mocked(playWorkStart);
 const restCue = vi.mocked(playRestStart);
-const getReadyCue = vi.mocked(scheduleGetReadyCues);
+const modeCue = vi.mocked(playModeChange);
+const pauseCue = vi.mocked(playPause);
+const resumeCue = vi.mocked(playResume);
+const presetCue = vi.mocked(playPresetChange);
+const resetCue = vi.mocked(playReset);
+const initAudio = vi.mocked(initializeAudio);
 
 function clockText(): string {
   return screen.getByRole("timer").textContent?.trim() ?? "";
@@ -70,7 +84,9 @@ function phaseText(): string {
 }
 
 function phaseHeadlineText(): string {
-  return document.querySelector(".phase-band__label")?.textContent?.trim() ?? "";
+  return (
+    document.querySelector(".phase-band__label")?.textContent?.trim() ?? ""
+  );
 }
 
 function modeContextText(): string {
@@ -207,7 +223,6 @@ beforeEach(() => {
   resetGetReadySettings();
   setGetReadySecondsForMode("rolls", 0);
   setGetReadySecondsForMode("drills", 0);
-  getReadyCue.mockReturnValue(vi.fn());
 });
 
 afterEach(() => {
@@ -227,14 +242,12 @@ describe("Get Ready countdown", () => {
     expect(phaseHeadlineText()).toBe("GET READY");
     expect(clockText()).toBe("0:05");
     expect(mainButton().textContent).toContain("STARTING...");
-    expect(mainButton().textContent).toContain(
-      "Press to stop the countdown",
-    );
+    expect(mainButton().textContent).toContain("Press to stop the countdown");
     expect(modeButton().textContent).toContain("LOCKED");
     expect(modeButton().textContent).toContain("Wait for the round to start");
     expect(modeButton().hasAttribute("disabled")).toBe(true);
     expect(roundText()).toBe("ROUND 1");
-    expect(getReadyCue).toHaveBeenCalledWith(5);
+    expect(workCue).not.toHaveBeenCalled();
 
     advance(5 * SECOND);
 
@@ -244,7 +257,7 @@ describe("Get Ready countdown", () => {
     expect(phaseText()).toBe("WORK");
     expect(mainLabelText()).toBe("Pause");
     expect(clockText()).toBe("5:00");
-    expect(workCue).not.toHaveBeenCalled();
+    expect(workCue).toHaveBeenCalledTimes(1);
   });
 
   it("runs 3 seconds for Drills", () => {
@@ -255,9 +268,7 @@ describe("Get Ready countdown", () => {
     pressMainShort();
 
     expect(clockText()).toBe("0:03");
-    expect(modeButton().textContent).toContain(
-      "Wait for the round to start",
-    );
+    expect(modeButton().textContent).toContain("Wait for the round to start");
 
     advance(3 * SECOND);
 
@@ -267,8 +278,6 @@ describe("Get Ready countdown", () => {
 
   it("cancels back to Ready without starting work", () => {
     setGetReadySecondsForMode("rolls", 5);
-    const cancel = vi.fn();
-    getReadyCue.mockReturnValue(cancel);
     render(<App />);
 
     pressMainShort();
@@ -279,14 +288,12 @@ describe("Get Ready countdown", () => {
     );
     expect(phaseHeadlineText()).toBe("READY");
     expect(clockText()).toBe("5:00");
-    expect(cancel).toHaveBeenCalled();
     expect(workCue).not.toHaveBeenCalled();
+    expect(resetCue).not.toHaveBeenCalled();
   });
 
-  it("returns to Ready on a full reset", () => {
+  it("returns to Ready on a full reset and plays reset", () => {
     setGetReadySecondsForMode("rolls", 5);
-    const cancel = vi.fn();
-    getReadyCue.mockReturnValue(cancel);
     render(<App />);
 
     pressMainShort();
@@ -296,7 +303,7 @@ describe("Get Ready countdown", () => {
       "ready",
     );
     expect(clockText()).toBe("5:00");
-    expect(cancel).toHaveBeenCalled();
+    expect(resetCue).toHaveBeenCalledTimes(1);
   });
 
   it("starts immediately when the configured duration is zero", () => {
@@ -310,7 +317,82 @@ describe("Get Ready countdown", () => {
       "running",
     );
     expect(clockText()).toBe("2:00");
-    expect(getReadyCue).not.toHaveBeenCalled();
+    expect(workCue).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("audio cue mapping", () => {
+  it("plays pause and resume exactly once each", () => {
+    render(<App />);
+    pressMainShort();
+    advance(1 * SECOND);
+    vi.clearAllMocks();
+
+    pressMainShort();
+    expect(pauseCue).toHaveBeenCalledTimes(1);
+
+    pressMainShort();
+    expect(resumeCue).toHaveBeenCalledTimes(1);
+    expect(pauseCue).toHaveBeenCalledTimes(1);
+    expect(workCue).not.toHaveBeenCalled();
+  });
+
+  it("plays preset_change only for preset changes, not mode changes", () => {
+    render(<App />);
+
+    pressModeShort();
+    expect(presetCue).toHaveBeenCalledTimes(1);
+    expect(modeCue).not.toHaveBeenCalled();
+
+    pressModeLong();
+    expect(modeCue).toHaveBeenCalledTimes(1);
+    expect(presetCue).toHaveBeenCalledTimes(1);
+  });
+
+  it("plays reset on a reset hold and no round cue", () => {
+    render(<App />);
+    pressMainShort();
+    advance(1 * SECOND);
+    vi.clearAllMocks();
+
+    pressMainLong();
+
+    expect(resetCue).toHaveBeenCalledTimes(1);
+    expect(workCue).not.toHaveBeenCalled();
+    expect(restCue).not.toHaveBeenCalled();
+  });
+
+  it("plays one start and one end per Work/Rest cycle", () => {
+    render(<App />);
+    pressMainShort();
+
+    advance(5 * MINUTE + SECOND);
+    advance(1 * MINUTE + SECOND);
+    advance(5 * MINUTE + SECOND);
+    advance(1 * MINUTE + SECOND);
+
+    expect(workCue).toHaveBeenCalledTimes(3);
+    expect(restCue).toHaveBeenCalledTimes(2);
+    expect(pauseCue).not.toHaveBeenCalled();
+    expect(resumeCue).not.toHaveBeenCalled();
+  });
+
+  it("shows a warning and keeps the timer working when audio load fails", async () => {
+    initAudio.mockResolvedValueOnce(false);
+
+    await act(async () => {
+      render(<App />);
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText("Sound unavailable")).toBeTruthy();
+
+    pressMainShort();
+
+    expect(clockText()).toBe("5:00");
+    expect(document.querySelector(".app")?.getAttribute("data-status")).toBe(
+      "running",
+    );
   });
 });
 

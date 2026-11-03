@@ -1,10 +1,9 @@
 /*
- * Three-region TV interface: branded header, central timer stage, control bar.
+ * Flat, high-contrast TV interface.
  *
- * Shared semantic tokens live in index.css. The layout is one fluid 16:9
- * composition using viewport-aware clamps; there are no per-resolution
- * layouts. The fill inside the primary control is the only full-surface
- * animation and is driven directly by the reset hold state.
+ * Composition: branded header, phase band + countdown + phase progress,
+ * grouped info row, equal-width control bar. All colours come from theme.css;
+ * there are no gradients, shadows or translucent surfaces.
  */
 
 .app {
@@ -12,11 +11,16 @@
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  background: var(--color-page);
-  color: var(--color-text);
+  background: var(--paper);
+  color: var(--ink);
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
+
+  /* 48px at 1080p, 96px at 4K. */
+  --safe-x: clamp(1.5rem, 4.44vh, 6rem);
+  --safe-y: clamp(0.75rem, 2vh, 2rem);
+  --rule: 1px solid var(--silver);
 }
 
 /* ---------- Header ---------- */
@@ -26,21 +30,20 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: var(--space-sm) var(--space-lg);
-  padding: clamp(0.7rem, 2vh, 1.75rem) clamp(1rem, 3vw, 3rem);
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm);
+  gap: var(--safe-y) var(--safe-x);
+  padding: max(0.5rem, 1.5vh) var(--safe-x);
+  background: var(--paper);
+  border-bottom: var(--rule);
 }
 
+/* The supplied artwork is black on white. Multiply lets the white field
+   disappear into the off-white header without altering the mark. */
 .app-header__logo {
   display: block;
   width: min(55vw, clamp(14rem, 30vw, 60rem));
   height: auto;
   max-width: 100%;
   flex: 0 1 auto;
-  /* The supplied artwork is black on white; multiply removes the white field
-     on the white header without altering the black mark. */
   mix-blend-mode: multiply;
 }
 
@@ -49,16 +52,17 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 0.1rem;
-  min-width: clamp(10rem, 14vw, 20rem);
+  min-width: clamp(9rem, 12vw, 18rem);
   margin-left: auto;
+  color: var(--charcoal);
   text-align: right;
 }
 
 .app-clock__date {
-  color: var(--color-text-muted);
-  font-size: clamp(0.65rem, 1vw, 1.5rem);
-  font-weight: 650;
-  letter-spacing: 0.09em;
+  color: var(--charcoal);
+  font-size: clamp(0.65rem, 1.4vh, 2rem);
+  font-weight: 600;
+  letter-spacing: 0.06em;
   line-height: 1.2;
   white-space: nowrap;
   text-transform: uppercase;
@@ -69,172 +73,196 @@
   align-items: baseline;
   justify-content: flex-end;
   gap: 0.3em;
-  font-size: clamp(1.4rem, 2.5vw, 5.5rem);
-  font-weight: 700;
+  color: var(--charcoal);
+  font-size: clamp(1.1rem, 2vw, 5rem);
+  font-weight: 600;
   line-height: 1;
-  color: var(--color-text);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .app-clock__time {
-  min-width: 8ch;
+  min-width: 5ch;
   text-align: right;
-  letter-spacing: -0.01em;
 }
 
 .app-clock__period {
-  min-width: 2.5ch;
-  font-size: 0.42em;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  min-width: 3ch;
+  font-size: 0.55em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-align: left;
 }
 
-/* ---------- Main stage ---------- */
+/* ---------- Central stage ---------- */
 
 .app-main {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
   min-height: 0;
-  padding: var(--space-md) clamp(1rem, 3vw, 3rem);
+  padding: var(--safe-y) var(--safe-x);
 }
 
 .app-main__stage {
+  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
-  gap: clamp(0.5rem, 1.8vh, 1.5rem);
+  gap: max(0.5rem, 1.6vh);
   width: 100%;
   min-height: 0;
 }
 
-.status-badge {
-  display: inline-flex;
+/* Thick phase band, directly above the digits. Text always names the phase. */
+.phase-band {
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.6em;
-  padding: 0.5em 1.1em;
-  border: 1px solid transparent;
-  border-radius: var(--radius-pill);
-  font-size: clamp(0.85rem, 1.4vw, 2.25rem);
-  font-weight: 800;
-  letter-spacing: 0.09em;
-  line-height: 1.1;
+  justify-content: center;
+  gap: 0.08em;
+  width: 100%;
+  min-height: clamp(4.5rem, 8.3vh, 18rem);
+  padding: 0.3em 1em;
+  box-sizing: border-box;
+  border-radius: 2px;
+  text-align: center;
   text-transform: uppercase;
-  white-space: nowrap;
 }
 
-.status-badge__dot {
-  width: 0.65em;
-  height: 0.65em;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: currentColor;
+.phase-band__label {
+  font-size: max(2.5rem, 6.2vh);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1;
 }
 
-.status-badge--ready {
-  color: var(--color-ready);
-  background: var(--color-ready-bg);
-  border-color: var(--color-ready-border);
+.phase-band__detail {
+  font-size: clamp(0.75rem, 1.7vh, 2.2rem);
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  line-height: 1.1;
 }
 
-.status-badge--work {
-  color: var(--color-green);
-  background: var(--color-green-bg);
-  border-color: var(--color-green-border);
+.phase-band--work {
+  background: var(--gold);
+  color: var(--ink);
 }
 
-.status-badge--rest {
-  color: var(--color-rest);
-  background: var(--color-rest-bg);
-  border-color: var(--color-rest-border);
+.phase-band--rest {
+  background: var(--charcoal);
+  color: var(--paper);
 }
 
-.status-badge--paused {
-  color: var(--color-paused);
-  background: var(--color-paused-bg);
-  border-color: var(--color-paused-border);
+.phase-band--ready {
+  background: var(--silver);
+  color: var(--ink);
+}
+
+.phase-band--paused[data-phase="work"] {
+  background: var(--gold-dim);
+  color: var(--ink);
+}
+
+.phase-band--paused[data-phase="rest"] {
+  background: var(--charcoal-dim);
+  color: var(--paper);
+}
+
+/* Final ten seconds: a red inset outline pulses once per second. The text
+   stays in its high-contrast phase colours, so state is never colour-only. */
+.phase-band--urgent {
+  outline: 0.4rem solid var(--transparent);
+  outline-offset: -0.4rem;
+  animation: urgent-pulse 1s steps(1, end) infinite;
+}
+
+@keyframes urgent-pulse {
+  0%,
+  100% {
+    outline-color: var(--transparent);
+  }
+
+  50% {
+    outline-color: var(--red);
+  }
 }
 
 .app-countdown {
   max-width: 100%;
-  color: var(--color-text);
-  font-family: var(--font-sans);
-  font-size: max(3.5rem, min(32vw, 48vh));
+  color: var(--ink);
+  font-size: max(14rem, 37vh);
   font-weight: 800;
-  line-height: 0.95;
-  letter-spacing: -0.045em;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
   text-align: center;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-.phase-track {
-  width: min(72vw, 100%);
-  height: clamp(0.3rem, 0.55vh, 0.75rem);
-  flex: 0 0 auto;
+.progress-bar {
+  width: 100%;
+  height: max(16px, 1.85vh);
   overflow: hidden;
-  background: #dfe6ee;
-  border-radius: var(--radius-pill);
+  background: var(--silver);
 }
 
-.phase-track__fill {
+.progress-bar__fill {
   display: block;
   width: 0;
   height: 100%;
-  background: var(--color-ready);
-  border-radius: inherit;
-  transition: width 250ms linear;
+  background: var(--gold);
 }
 
-.phase-track--work .phase-track__fill {
-  background: var(--color-green);
+.progress-bar--rest .progress-bar__fill {
+  background: var(--charcoal);
 }
 
-.phase-track--rest .phase-track__fill {
-  background: var(--color-rest);
+.progress-bar--paused[data-phase="work"] .progress-bar__fill {
+  background: var(--gold-dim);
 }
 
-.phase-track--paused .phase-track__fill {
-  background: var(--color-paused);
+.progress-bar--paused[data-phase="rest"] .progress-bar__fill {
+  background: var(--charcoal-dim);
 }
 
-/* ---------- Secondary information card ---------- */
+/* ---------- Grouped info row ---------- */
 
 .timer-card {
   display: flex;
-  flex-direction: column;
-  gap: clamp(0.4rem, 1vh, 0.8rem);
-  width: min(78%, 100%);
-  padding: clamp(0.65rem, 1.6vh, 1.25rem) clamp(0.9rem, 2vw, 1.75rem);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: max(0.5rem, 1.6vh) max(1rem, 2vw);
+  width: 100%;
+  padding: max(0.75rem, 2.2vh) 0;
+  background: var(--transparent);
+  border-top: var(--rule);
+  border-bottom: var(--rule);
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .timer-card__selectors {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-sm) var(--space-md);
+  align-items: center;
+  gap: clamp(0.6rem, 1.4vw, 1.5rem);
 }
 
 .selector-group {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.4rem;
 }
 
 .selector-label {
-  color: var(--color-text-muted);
-  font-size: clamp(0.62rem, 0.8vw, 1rem);
-  font-weight: 800;
-  letter-spacing: 0.12em;
+  color: var(--charcoal);
+  font-size: clamp(0.6rem, 0.9vw, 1.5rem);
+  font-weight: 700;
+  letter-spacing: 0.1em;
   line-height: 1;
   text-transform: uppercase;
 }
@@ -243,101 +271,97 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.3rem;
 }
 
 .selector-chip {
+  padding: 0.25em 0.6em;
+  border: 1px solid var(--silver);
+  border-radius: 0;
+  background: var(--transparent);
+  color: var(--charcoal);
   font: inherit;
-  padding: 0.4em 0.8em;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-surface-subtle);
-  color: var(--color-text-secondary);
-  font-size: clamp(0.75rem, 1.05vw, 2rem);
-  line-height: 1.15;
+  font-size: clamp(0.75rem, 1.2vw, 2.5rem);
+  font-weight: 600;
+  line-height: 1.2;
   white-space: nowrap;
   cursor: pointer;
   touch-action: manipulation;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    color 0.15s ease;
 }
 
 .selector-chip[data-selected="true"] {
-  color: var(--color-green-strong);
-  background: var(--color-green-bg);
-  border-color: var(--color-green-border);
-  font-weight: 800;
-  box-shadow: inset 0 -0.14em 0 var(--color-green);
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
 }
 
 .selector-chip:hover:not([aria-disabled="true"]) {
-  border-color: var(--color-border-strong);
-  background: var(--color-surface-strong);
+  border-color: var(--ink);
+  color: var(--ink);
 }
 
 .selector-chip[aria-disabled="true"] {
   cursor: default;
 }
 
-.selector-chip[aria-disabled="true"]:not([data-selected="true"]) {
-  background: var(--color-surface-subtle);
-  border-color: var(--color-border);
-}
-
 .selector-chip:focus-visible {
-  outline: 3px solid var(--color-focus);
+  outline: 3px solid var(--ink);
   outline-offset: 2px;
 }
 
 .timer-card__meta {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 0.35rem 1rem;
-  min-height: 1.6em;
-  color: var(--color-text-secondary);
-  font-size: clamp(0.75rem, 1vw, 1.75rem);
-  font-weight: 650;
-  letter-spacing: 0.05em;
-  line-height: 1.3;
-  text-align: center;
-  text-transform: uppercase;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.2rem 0.8rem;
+  margin-left: auto;
+  color: var(--charcoal);
+  font-size: clamp(1rem, 3vh, 3rem);
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.25;
+  text-align: right;
 }
 
-.meta-item {
-  white-space: nowrap;
+.meta-item--round {
+  color: var(--ink);
+  font-size: clamp(1.4rem, 3.4vh, 3.5rem);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.meta-total {
+  color: var(--charcoal);
+  font-weight: 600;
 }
 
 .meta-separator {
-  color: var(--color-border-strong);
+  color: var(--charcoal);
 }
 
 .timer-card__notice {
-  color: var(--color-paused);
-  font-weight: 800;
+  color: var(--red);
+  font-weight: 700;
+  text-align: center;
 }
 
-/* ---------- Control bar ---------- */
+/* ---------- Equal control bar ---------- */
 
 .app-footer {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: clamp(0.25rem, 0.8vh, 0.6rem);
-  padding: clamp(0.6rem, 1.8vh, 1.5rem) clamp(1rem, 3vw, 3rem)
-    clamp(0.5rem, 1.2vh, 1rem);
-  background: var(--color-surface);
-  border-top: 1px solid var(--color-border);
+  gap: 0.35rem;
+  padding: max(0.75rem, 1.8vh) var(--safe-x) max(0.75rem, 2vh);
+  background: var(--paper);
+  border-top: var(--rule);
 }
 
 .app-footer__controls {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: stretch;
-  gap: clamp(0.6rem, 1.4vw, 1.5rem);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: max(1rem, 2.22vh);
   width: 100%;
 }
 
@@ -346,49 +370,60 @@
   display: flex;
   align-items: center;
   overflow: hidden;
-  min-height: clamp(3.75rem, 10vh, 7.5rem);
-  padding: clamp(0.55rem, 1.4vh, 1rem) clamp(0.8rem, 1.8vw, 1.75rem);
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  height: max(6rem, 10vh);
+  padding: 0 max(1rem, 2vw);
+  border: 1px solid var(--ink);
+  border-radius: 0;
   font: inherit;
   text-align: left;
   cursor: pointer;
   touch-action: manipulation;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
 }
 
 .control-button--primary {
-  flex: 1.45 1 26rem;
-  color: var(--color-primary-text);
-  background: var(--color-primary);
-  border-color: #e1b32d;
-  box-shadow: var(--shadow-sm);
-  font-size: clamp(1.2rem, 2.3vw, 4.5rem);
+  background: var(--gold);
+  border-color: var(--gold);
+  color: var(--ink);
 }
 
 .control-button--mode {
-  flex: 1 1 20rem;
-  color: var(--color-text);
-  background: var(--color-secondary);
-  border-color: var(--color-border-strong);
-  box-shadow: var(--shadow-sm);
-  font-size: clamp(1rem, 1.8vw, 3.5rem);
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
 }
 
-/* Full-height, left-to-right hold-to-reset shade. The label and hint sit above
-   it and never move; the button keeps its border, radius and focus ring. */
+/* Full-height hold-to-reset shade, tied to the same --main-hold value as the
+   reset recogniser. The content sits above it and never moves. */
 .control-button--primary::before {
   content: "";
   position: absolute;
   inset: 0 auto 0 0;
   width: var(--main-hold, 0%);
-  background: var(--color-primary-progress);
-  border-radius: inherit;
+  background: var(--gold-progress);
   pointer-events: none;
-  transition: width 60ms linear;
+}
+
+.control-button--primary[data-holding="true"] {
+  outline: 3px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* The white control's 800 ms hold is shown by a gold inner ring whose opacity
+   follows the same elapsed time as the mode gesture. */
+.control-button__hold-ring {
+  position: absolute;
+  inset: 0;
+  border: 0.32em solid var(--gold);
+  opacity: var(--mode-hold, 0);
+  pointer-events: none;
+}
+
+.control-button--mode:disabled {
+  background: var(--charcoal);
+  border-color: var(--charcoal);
+  color: var(--paper);
+  cursor: default;
+  opacity: 1;
 }
 
 .control-button__content {
@@ -396,15 +431,15 @@
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: clamp(0.5rem, 1vw, 1.1rem);
+  gap: clamp(0.6rem, 1vw, 1rem);
   width: 100%;
   min-width: 0;
 }
 
 .control-button__icon {
   display: inline-flex;
-  width: 1.05em;
-  height: 1.05em;
+  width: clamp(1.5rem, 3.6vh, 4rem);
+  height: clamp(1.5rem, 3.6vh, 4rem);
   flex: 0 0 auto;
 }
 
@@ -415,168 +450,193 @@
 }
 
 .control-button__text {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  display: grid;
+  grid-template-rows: auto auto auto;
+  align-content: center;
   gap: 0.1em;
   min-width: 0;
 }
 
 .control-button__label {
+  font-size: max(1.6rem, 4vh);
   font-weight: 800;
   line-height: 1;
-  letter-spacing: 0.01em;
+  letter-spacing: -0.01em;
 }
 
 .control-button__hint {
-  font-size: clamp(0.62rem, 0.85vw, 1.25rem);
-  font-weight: 650;
-  line-height: 1.2;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.control-button--primary .control-button__hint {
-  color: rgba(23, 18, 5, 0.68);
-}
-
-.control-button--mode .control-button__hint {
-  color: var(--color-text-muted);
-}
-
-.control-button--primary:hover {
-  background: var(--color-primary-hover);
-}
-
-.control-button--mode:hover:not([aria-disabled="true"]) {
-  background: var(--color-secondary-hover);
-  border-color: var(--color-text-muted);
-}
-
-.control-button--primary[data-main-held="true"] {
-  border-color: var(--color-primary-text);
-}
-
-.control-button--mode[aria-disabled="true"] {
-  color: var(--color-text-muted);
-  background: var(--color-surface-strong);
-  border-color: var(--color-border);
-  cursor: default;
-}
-
-.control-button:focus-visible {
-  outline: 3px solid var(--color-focus);
-  outline-offset: 3px;
-}
-
-.controller-status {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.4rem;
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: clamp(0.65rem, 0.85vw, 1.1rem);
+  font-size: clamp(0.75rem, 1.8vh, 2rem);
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.15;
   letter-spacing: 0.03em;
 }
 
-.controller-status__dot {
-  width: 0.5em;
-  height: 0.5em;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--color-border-strong);
+.control-button--mode .control-button__hint {
+  color: var(--paper);
 }
 
-.controller-status--connected .controller-status__dot {
-  background: var(--color-green);
+.control-button:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
 }
 
-.controller-status--disconnected .controller-status__dot {
-  background: var(--color-paused);
+.app-footer__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.25rem;
 }
 
-/* ---------- Compact / narrow adaptations ---------- */
+.idle-hint {
+  margin: 0;
+  color: var(--charcoal);
+  font-size: clamp(0.65rem, 1.2vh, 1.5rem);
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  animation: idle-hint 10s step-end forwards;
+}
+
+@keyframes idle-hint {
+  0%,
+  99% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+.controller-status {
+  margin: 0;
+  color: var(--charcoal);
+  font-size: clamp(0.65rem, 1.2vh, 1.5rem);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.controller-status--error {
+  color: var(--red);
+}
+
+/* ---------- Mode confirmation ---------- */
+
+.mode-flash {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  z-index: 10;
+  padding: 0.18em 0.5em;
+  border: 2px solid var(--ink);
+  background: var(--gold);
+  color: var(--ink);
+  font-size: max(4rem, 10vh);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  text-transform: uppercase;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Smaller landscape windows ---------- */
 
 @media (max-height: 800px) {
   .app-header {
-    padding: 0.5rem 1rem;
+    padding: 0.45rem var(--safe-x);
   }
 
   .app-header__logo {
-    width: min(50vw, 22rem);
+    width: min(44vw, 18rem);
   }
 
   .app-clock__time-row {
-    font-size: clamp(1.1rem, 2.2vw, 1.8rem);
+    font-size: 1.6rem;
   }
 
   .app-clock__date {
-    font-size: clamp(0.6rem, 0.9vw, 0.8rem);
+    font-size: 0.6rem;
   }
 
   .app-main {
-    padding: 0.5rem 1rem;
+    padding: 0.4rem var(--safe-x);
   }
 
   .app-main__stage {
-    gap: 0.45rem;
+    gap: 0.4rem;
+  }
+
+  .phase-band {
+    min-height: 3.75rem;
+  }
+
+  .phase-band__label {
+    font-size: 2.3rem;
   }
 
   .app-countdown {
-    font-size: max(3.25rem, min(30vw, 40vh));
-  }
-
-  .status-badge {
-    font-size: clamp(0.75rem, 1.2vw, 1.1rem);
-    padding: 0.4em 0.9em;
+    font-size: max(8rem, 30vh);
   }
 
   .timer-card {
-    width: min(86%, 100%);
-    padding: 0.5rem 0.75rem;
+    padding: 0.35rem 0;
   }
 
   .selector-chip {
-    font-size: clamp(0.7rem, 1vw, 0.95rem);
+    font-size: 0.8rem;
   }
 
   .timer-card__meta {
-    font-size: clamp(0.7rem, 0.95vw, 0.95rem);
+    font-size: 1rem;
+  }
+
+  .meta-item--round {
+    font-size: 1.35rem;
   }
 
   .app-footer {
-    padding: 0.45rem 1rem 0.4rem;
+    padding: 0.45rem var(--safe-x);
   }
 
   .control-button {
-    min-height: clamp(3rem, 9vh, 4.5rem);
-    padding: 0.35rem 0.75rem;
+    height: max(3.75rem, 9vh);
   }
 
-  .control-button--primary {
-    font-size: clamp(1rem, 1.8vw, 1.6rem);
-  }
-
-  .control-button--mode {
-    font-size: clamp(0.9rem, 1.5vw, 1.4rem);
+  .control-button__label {
+    font-size: 1.5rem;
   }
 
   .control-button__hint {
-    font-size: clamp(0.58rem, 0.75vw, 0.75rem);
+    font-size: 0.65rem;
+  }
+
+  .mode-flash {
+    font-size: 3.5rem;
   }
 }
 
 @media (max-width: 700px) {
   .app-header {
-    gap: 0.35rem 0.75rem;
-    padding: 0.55rem 0.75rem;
+    gap: 0.4rem 0.75rem;
+    padding: 0.5rem 0.75rem;
   }
 
   .app-header__logo {
-    width: min(56vw, 14rem);
+    width: min(62vw, 15rem);
   }
 
   .app-clock {
@@ -584,52 +644,61 @@
   }
 
   .app-clock__time-row {
-    font-size: clamp(1.05rem, 4.6vw, 1.5rem);
+    font-size: 1.25rem;
   }
 
   .app-clock__date {
-    font-size: 0.62rem;
+    font-size: 0.55rem;
   }
 
   .app-main {
-    padding: 0.6rem 0.75rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .phase-band__label {
+    font-size: 2rem;
   }
 
   .app-countdown {
-    font-size: max(3.5rem, min(34vw, 30vh));
+    font-size: max(6rem, 28vw);
   }
 
   .timer-card {
-    width: 100%;
+    align-items: flex-start;
+    justify-content: flex-start;
   }
 
-  .timer-card__selectors {
+  .timer-card__meta {
     justify-content: flex-start;
+    margin-left: 0;
+    text-align: left;
   }
 
   .app-footer__controls {
-    gap: 0.5rem;
-  }
-
-  .control-button--primary,
-  .control-button--mode {
-    flex-basis: 100%;
+    grid-template-columns: 1fr;
   }
 
   .control-button {
-    min-height: 3.5rem;
+    height: 4.5rem;
   }
 
+  .control-button__label {
+    font-size: 1.5rem;
+  }
+
+  .idle-hint,
   .controller-status {
-    justify-content: flex-start;
+    font-size: 0.7rem;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .selector-chip,
-  .control-button,
-  .control-button--primary::before,
-  .phase-track__fill {
-    transition: none;
+  .phase-band--urgent {
+    animation: none;
+    outline-color: var(--red);
+  }
+
+  .idle-hint {
+    animation: none;
   }
 }

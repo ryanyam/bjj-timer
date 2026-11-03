@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { formatClock } from "./clock";
 
 describe("formatClock", () => {
-  it("formats the local date and a 12-hour time with seconds", () => {
+  it("formats the local date and a 12-hour time with hour and minutes", () => {
     const morning = new Date(2026, 10, 3, 10, 44, 45);
 
     expect(formatClock(morning, "en-US")).toEqual({
       date: "TUE, NOV 3, 2026",
-      time: "10:44:45",
+      time: "10:44",
       period: "AM",
     });
   });
@@ -17,7 +17,7 @@ describe("formatClock", () => {
 
     expect(formatClock(afternoon, "en-US")).toEqual({
       date: "TUE, NOV 3, 2026",
-      time: "03:05:09",
+      time: "03:05",
       period: "PM",
     });
   });
@@ -27,7 +27,7 @@ describe("formatClock", () => {
 
     expect(formatClock(midnight, "en-US")).toEqual({
       date: "TUE, NOV 3, 2026",
-      time: "12:00:00",
+      time: "12:00",
       period: "AM",
     });
   });

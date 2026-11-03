@@ -1,75 +1,17 @@
 /*
- * Design tokens and page frame.
- *
- * The timer is a light, TV-first interface. Semantic tokens are shared by the
- * header, stage, card and footer so surfaces, borders and interaction states
- * stay consistent. No UI framework is used.
+ * Base page frame only. Colours and fonts live in theme.css.
+ * The app owns its own grid and is expected to fit without relying on
+ * overflow clipping.
  */
 
 :root {
-  --font-sans:
-    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
-    sans-serif;
-  --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
-
-  --color-page: #f2f5f8;
-  --color-surface: #ffffff;
-  --color-surface-subtle: #f7f9fb;
-  --color-surface-strong: #eef2f6;
-  --color-text: #0b1220;
-  --color-text-secondary: #475467;
-  --color-text-muted: #667085;
-  --color-border: #e3e8ee;
-  --color-border-strong: #cfd7e2;
-
-  --color-green: #137a46;
-  --color-green-strong: #0d6038;
-  --color-green-bg: #e7f5ec;
-  --color-green-border: #b9e2c8;
-  --color-rest: #1d4ed8;
-  --color-rest-bg: #e9efff;
-  --color-rest-border: #c3d4ff;
-  --color-paused: #9a5b06;
-  --color-paused-bg: #fff4d9;
-  --color-paused-border: #f0d28c;
-  --color-ready: #475467;
-  --color-ready-bg: #eef1f5;
-  --color-ready-border: #d7dee7;
-
-  --color-primary: #f5c84c;
-  --color-primary-hover: #f8d166;
-  --color-primary-progress: #d88e0c;
-  --color-primary-text: #171205;
-  --color-secondary: #ffffff;
-  --color-secondary-hover: #f7f9fb;
-  --color-focus: #0b1220;
-
-  --radius-sm: 0.5rem;
-  --radius-md: 0.875rem;
-  --radius-lg: 1.25rem;
-  --radius-pill: 999px;
-
-  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
-  --shadow-md: 0 0.75rem 2rem rgba(16, 24, 40, 0.08);
-
-  --space-xs: clamp(0.25rem, 0.6vh, 0.5rem);
-  --space-sm: clamp(0.5rem, 1.2vh, 0.9rem);
-  --space-md: clamp(0.75rem, 2vh, 1.5rem);
-  --space-lg: clamp(1rem, 3vh, 2.5rem);
-  --space-xl: clamp(1.5rem, 4vh, 4rem);
-
-  color-scheme: light;
-  font: 18px/1.45 var(--font-sans);
-  color: var(--color-text);
-  background: var(--color-page);
+  font: 16px/1.45 var(--font-sans);
+  color: var(--ink);
+  background: var(--paper);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
 }
 
 html,
@@ -80,5 +22,7 @@ body,
 
 body {
   margin: 0;
-  background: var(--color-page);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
 }

@@ -9,7 +9,9 @@ import {
   initialRoundState,
   mainLabel,
   nextPhase,
+  phaseHeadline,
   phaseLabel,
+  inFinalTen,
   reduce,
   selectionAllowed,
   stateKey,
@@ -336,23 +338,22 @@ describe("mode and preset selection while ready", () => {
     expect(state.transitionSeq).toBe(0);
   });
 
-  it("remembers each mode's last preset", () => {
+  it("selects the first preset whenever the main mode changes", () => {
     const rollsSecond = run(initialRoundState, [
       { type: "selectPreset", presetIndex: 1 },
       nextMode,
       { type: "selectPreset", presetIndex: 1 },
-      nextMode,
     ]);
 
-    expect(currentMode(rollsSecond).title).toBe("ROLLS");
+    expect(currentMode(rollsSecond).title).toBe("DRILLS");
     expect(currentPresetIndex(rollsSecond)).toBe(1);
-    expect(displayMs(rollsSecond, T0)).toBe(3 * MINUTE);
+    expect(displayMs(rollsSecond, T0)).toBe(1 * MINUTE);
 
-    const drillsSecond = reduce(rollsSecond, nextMode);
+    const backToRolls = reduce(rollsSecond, nextMode);
 
-    expect(currentMode(drillsSecond).title).toBe("DRILLS");
-    expect(currentPresetIndex(drillsSecond)).toBe(1);
-    expect(displayMs(drillsSecond, T0)).toBe(1 * MINUTE);
+    expect(currentMode(backToRolls).title).toBe("ROLLS");
+    expect(currentPresetIndex(backToRolls)).toBe(0);
+    expect(displayMs(backToRolls, T0)).toBe(5 * MINUTE);
   });
 
   it("cycles presets in order and wraps within the current mode", () => {
@@ -478,6 +479,26 @@ describe("labels and previews", () => {
     expect(phaseLabel(initialRoundState)).toBe("WORK");
     expect(phaseLabel(drills)).toBe("WORK");
     expect(phaseLabel(ticked(started(T0), T0 + 5 * MINUTE))).toBe("REST");
+  });
+
+  it("uses READY, WORK, REST and PAUSED as the large phase words", () => {
+    const work = started(T0);
+    const rest = ticked(work, T0 + 5 * MINUTE);
+    const pausedWork = paused(work, T0 + MINUTE);
+
+    expect(phaseHeadline(initialRoundState)).toBe("READY");
+    expect(phaseHeadline(work)).toBe("WORK");
+    expect(phaseHeadline(rest)).toBe("REST");
+    expect(phaseHeadline(pausedWork)).toBe("PAUSED");
+  });
+
+  it("flags only the final ten running seconds", () => {
+    const work = started(T0);
+
+    expect(inFinalTen(work, T0 + 5 * MINUTE - 10 * SECOND)).toBe(true);
+    expect(inFinalTen(work, T0 + 5 * MINUTE - 10 * SECOND - 1)).toBe(false);
+    expect(inFinalTen(initialRoundState, T0)).toBe(false);
+    expect(inFinalTen(paused(work, T0 + MINUTE), T0 + MINUTE)).toBe(false);
   });
 
   it("previews the first work while ready, rest during work, and work during rest", () => {

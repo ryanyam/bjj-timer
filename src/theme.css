@@ -1,0 +1,35 @@
+/*
+ * The single theme file.
+ *
+ * Every colour used by the interface is declared here. Component styles use
+ * only these variables; there are no gradients, translucent fills or shadows.
+ */
+
+@font-face {
+  font-family: "Inter";
+  src: url("./assets/inter-variable.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+:root {
+  /* Approved gym palette */
+  --paper: #f4f4f2;
+  --ink: #0a0a0a;
+  --charcoal: #4c4d4e;
+  --silver: #a7a9ac;
+  --gold: #c9a227;
+
+  /* Derived, accessible shades from the same palette */
+  --gold-progress: #b07a00;
+  --gold-dim: #e6dbb7;
+  --charcoal-dim: #5d5e5f;
+  --red: #b3261e;
+  --transparent: transparent;
+
+  /* Type */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+}

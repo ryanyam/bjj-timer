@@ -7,6 +7,7 @@ vi.mock("./audio", () => ({
   unlockAudio: vi.fn(),
   playWorkStart: vi.fn(),
   playRestStart: vi.fn(),
+  playModeChange: vi.fn(),
 }));
 
 import { playWorkStart } from "./audio";
@@ -93,7 +94,7 @@ function clockText(): string {
 }
 
 function badgeText(): string {
-  return document.querySelector(".status-badge")?.textContent?.trim() ?? "";
+  return document.querySelector(".phase-band")?.textContent?.trim() ?? "";
 }
 
 function phaseText(): string {
@@ -200,22 +201,24 @@ afterEach(() => {
 });
 
 describe("controller status", () => {
-  it("shows waiting until the browser exposes a controller", () => {
+  it("does not show a waiting or connected status", () => {
     render(<App />);
 
-    expect(screen.getByText("Waiting for controller input")).toBeTruthy();
+    expect(screen.queryByText("Waiting for controller input")).toBeNull();
+    expect(screen.queryByText("Controller connected")).toBeNull();
 
     pads = [makePad()];
     frameAt(0);
 
-    expect(screen.getByText("Controller connected")).toBeTruthy();
+    expect(screen.queryByText("Waiting for controller input")).toBeNull();
+    expect(screen.queryByText("Controller connected")).toBeNull();
   });
 
-  it("distinguishes a known disconnection from a not-yet-detected controller", () => {
+  it("shows an error after a known disconnection and clears it on return", () => {
     pads = [makePad()];
     render(<App />);
     frameAt(0);
-    expect(screen.getByText("Controller connected")).toBeTruthy();
+    expect(screen.queryByText("Controller disconnected")).toBeNull();
 
     act(() => {
       window.dispatchEvent(new Event("gamepaddisconnected"));
@@ -228,7 +231,8 @@ describe("controller status", () => {
 
     pads = [makePad()];
     frameAt(32);
-    expect(screen.getByText("Controller connected")).toBeTruthy();
+    expect(screen.queryByText("Controller disconnected")).toBeNull();
+    expect(screen.queryByText("Controller connected")).toBeNull();
   });
 });
 
@@ -385,23 +389,26 @@ describe("the white MODE/OPTION button", () => {
     expect(clockText()).toBe("5:00");
   });
 
-  it("remembers each mode's last preset", () => {
+  it("starts each newly selected mode on its first preset", () => {
     const pad = mountWithPad();
 
     // Rolls -> preset 2.
     tapMode(pad, 100);
     expect(clockText()).toBe("3:00");
 
-    // Hold to Drills, then select its preset 2.
+    // Hold to Drills: its first preset, not the previously used preset.
     setMode(pad, true);
     frameAt(200);
     frameAt(200 + MODE_BUTTON_HOLD_MS);
     setMode(pad, false);
     frameAt(200 + MODE_BUTTON_HOLD_MS + 16);
+    expect(clockText()).toBe("2:00");
+
+    // Drills -> preset 2.
     tapMode(pad, 400);
     expect(clockText()).toBe("1:00");
 
-    // Back to Rolls: its remembered preset is still selected.
+    // Back to Rolls: its first preset again.
     setMode(pad, true);
     frameAt(500);
     frameAt(500 + MODE_BUTTON_HOLD_MS);
@@ -409,7 +416,7 @@ describe("the white MODE/OPTION button", () => {
     frameAt(500 + MODE_BUTTON_HOLD_MS + 16);
 
     expect(modeContextText()).toBe("ROLLS");
-    expect(clockText()).toBe("3:00");
+    expect(clockText()).toBe("5:00");
   });
 
   it("blocks selection while running and shows the notice", () => {

@@ -8,20 +8,22 @@ import {
   type MouseEvent,
 } from "react";
 import { formatRemaining } from "./timer";
-import { createPressRecogniser, type PressRecogniser } from "./press";
+import { createPressRecogniser } from "./press";
 import {
   currentMode,
   currentPreset,
   currentPresetIndex,
   displayMs,
+  inFinalTen,
   initialRoundState,
   mainLabel,
   nextPhase,
+  phaseHeadline,
+  phaseLabel,
   phaseProgress,
   reduce,
   selectionAllowed,
   stateKey,
-  statusLabel,
   statusTone,
 } from "./round";
 import {
@@ -31,8 +33,13 @@ import {
 } from "./training";
 import { LiveClock } from "./LiveClock";
 import logoUrl from "./assets/alliance-jiu-jitsu-manila.jpg";
-import { playRestStart, playWorkStart, unlockAudio } from "./audio";
-import { useGamepadInput, type GamepadStatus } from "./useGamepadInput";
+import {
+  playModeChange,
+  playRestStart,
+  playWorkStart,
+  unlockAudio,
+} from "./audio";
+import { useGamepadInput } from "./useGamepadInput";
 import { MAIN_BUTTON_HOLD_MS, MODE_BUTTON_HOLD_MS } from "./gamepad";
 import "./App.css";
 
@@ -49,17 +56,11 @@ const NOTICE_MS = 2_200;
 /** Refresh rate for the pointer/touch hold-progress fill. */
 const POINTER_HOLD_PROGRESS_MS = 50;
 
-const GAMEPAD_STATUS_TEXT: Record<GamepadStatus, string> = {
-  connected: "Controller connected",
-  waiting: "Waiting for controller input",
-  disconnected: "Controller disconnected",
-  unsupported: "Controller: not available in this browser",
-};
-
 function App() {
   const [state, dispatch] = useReducer(reduce, initialRoundState);
   const [now, setNow] = useState(() => Date.now());
   const [notice, setNotice] = useState<string | null>(null);
+  const [modeFlash, setModeFlash] = useState<string | null>(null);
 
   const mode = currentMode(state);
   const preset = currentPreset(state);
@@ -68,6 +69,8 @@ function App() {
   const canSelect = selectionAllowed(state);
   const tone = statusTone(state);
   const phasePercent = phaseProgress(state, now);
+  const headline = phaseHeadline(state);
+  const urgent = inFinalTen(state, now);
 
   /*
    * Pointer/touch hold progress uses the same threshold and clock-based timing
@@ -127,6 +130,63 @@ function App() {
       }
 
       setPointerHoldProgress(progress);
+    }, POINTER_HOLD_PROGRESS_MS);
+  }, []);
+
+  /*
+   * The white Mode control has a shorter hold. It gets the same visible
+   * feedback treatment: a gold ring that becomes more visible as the 800 ms
+   * mode-hold threshold approaches.
+   */
+  const [modeHoldProgress, setModeHoldProgress] = useState(0);
+  const modeHoldStartedAt = useRef<number | null>(null);
+  const modeHoldTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearModeHoldTimer = useCallback(() => {
+    if (modeHoldTimer.current !== null) {
+      clearInterval(modeHoldTimer.current);
+      modeHoldTimer.current = null;
+    }
+
+    modeHoldStartedAt.current = null;
+  }, []);
+
+  const stopModeHold = useCallback(() => {
+    clearModeHoldTimer();
+    setModeHoldProgress(0);
+  }, [clearModeHoldTimer]);
+
+  const startModeHold = useCallback(() => {
+    if (modeHoldStartedAt.current !== null) {
+      return;
+    }
+
+    modeHoldStartedAt.current = Date.now();
+    setModeHoldProgress(0);
+
+    modeHoldTimer.current = setInterval(() => {
+      const startedAt = modeHoldStartedAt.current;
+
+      if (startedAt === null) {
+        return;
+      }
+
+      const progress = Math.min(
+        1,
+        (Date.now() - startedAt) / MODE_BUTTON_HOLD_MS,
+      );
+
+      if (progress >= 1) {
+        if (modeHoldTimer.current !== null) {
+          clearInterval(modeHoldTimer.current);
+          modeHoldTimer.current = null;
+        }
+
+        setModeHoldProgress(0);
+        return;
+      }
+
+      setModeHoldProgress(progress);
     }, POINTER_HOLD_PROGRESS_MS);
   }, []);
 
@@ -220,6 +280,13 @@ function App() {
     gamepad.mainHoldProgress,
   );
 
+  const controllerError =
+    gamepad.status === "disconnected"
+      ? "Controller disconnected"
+      : gamepad.status === "unsupported"
+        ? "Controller unavailable"
+        : null;
+
   useEffect(() => {
     if (state.status !== "running" || state.deadline === null) {
       return;
@@ -266,6 +333,30 @@ function App() {
   }, [state.transitionSeq, state.status, state.lastTransition]);
 
   /*
+   * A mode change gets a single short confirmation: one beep and a one-second
+   * flash of the new mode name. The mode object is stable per index, so this
+   * runs once per change, not once per timer tick.
+   */
+  const previousMode = useRef(mode.id);
+
+  useEffect(() => {
+    if (mode.id === previousMode.current) {
+      return;
+    }
+
+    previousMode.current = mode.id;
+    playModeChange();
+
+    const showId = setTimeout(() => setModeFlash(mode.title), 0);
+    const hideId = setTimeout(() => setModeFlash(null), 1_000);
+
+    return () => {
+      clearTimeout(showId);
+      clearTimeout(hideId);
+    };
+  }, [mode]);
+
+  /*
    * A blocked selection attempt is recorded by the reducer, then acknowledged
    * once, asynchronously, so the effect does not set state during the render
    * commit. The message auto-dismisses and is re-armed only by a new gesture.
@@ -298,6 +389,7 @@ function App() {
       mainPress.cancel();
       modePress.cancel();
       stopPointerHold();
+      stopModeHold();
     };
 
     // Losing focus abandons a press in flight: the operator has looked away, and
@@ -307,12 +399,20 @@ function App() {
     return () => {
       window.removeEventListener("blur", cancelPresses);
       // Unmount: drop any outstanding hold without firing anything, and clear
-      // the progress sampler without scheduling another render.
+      // the progress samplers without scheduling another render.
       mainPress.cancel();
       modePress.cancel();
       clearPointerHoldTimer();
+      clearModeHoldTimer();
     };
-  }, [mainPress, modePress, stopPointerHold, clearPointerHoldTimer]);
+  }, [
+    mainPress,
+    modePress,
+    stopPointerHold,
+    clearPointerHoldTimer,
+    stopModeHold,
+    clearModeHoldTimer,
+  ]);
 
   return (
     <div
@@ -332,25 +432,31 @@ function App() {
 
       <main className="app-main">
         <div className="app-main__stage">
-          <span
-            className={`status-badge status-badge--${tone}`}
+          <div
+            className={`phase-band status-badge status-badge--${tone} phase-band--${tone}${urgent ? " phase-band--urgent" : ""}`}
+            data-phase={state.phase}
             role="status"
             aria-live="polite"
           >
-            <span className="status-badge__dot" aria-hidden="true" />
-            {statusLabel(state)}
-          </span>
+            <span className="phase-band__label">{headline}</span>{" "}
+            <span className="phase-band__detail">
+              {headline === phaseLabel(state)
+                ? mode.title
+                : `${phaseLabel(state)} · ${mode.title}`}
+            </span>
+          </div>
 
           <div className="app-countdown" role="timer">
             {formatRemaining(displayMs(state, now))}
           </div>
 
           <div
-            className={`phase-track phase-track--${tone}`}
+            className={`progress-bar progress-bar--${tone}`}
+            data-phase={state.phase}
             aria-hidden="true"
           >
             <span
-              className="phase-track__fill"
+              className="progress-bar__fill"
               style={{ width: `${phasePercent * 100}%` }}
             />
           </div>
@@ -424,7 +530,12 @@ function App() {
                 </span>
               ) : (
                 <>
-                  <span className="meta-item">{`ROUND ${state.round}`}</span>
+                  <span className="meta-item meta-item--round">
+                    {`ROUND ${state.round}`}
+                  </span>
+                  <span className="meta-total" aria-hidden="true">
+                    / ∞
+                  </span>
                   <span className="meta-separator" aria-hidden="true">
                     ·
                   </span>
@@ -439,6 +550,12 @@ function App() {
               )}
             </div>
           </section>
+
+          {modeFlash !== null && (
+            <div className="mode-flash" role="status" aria-live="assertive">
+              {modeFlash}
+            </div>
+          )}
         </div>
       </main>
 
@@ -450,6 +567,7 @@ function App() {
             aria-label={mainLabel(state)}
             aria-describedby="primary-hint"
             data-main-held={gamepad.mainPressed ? "true" : undefined}
+            data-holding={mainHoldProgress > 0 ? "true" : undefined}
             style={mainHoldStyle(mainHoldProgress)}
             onPointerDown={() => {
               startPointerHold();
@@ -485,7 +603,10 @@ function App() {
                   {mainLabel(state).toUpperCase()}
                 </span>
                 <span className="control-button__hint" id="primary-hint">
-                  Hold to reset
+                  {state.status === "paused" ? "Hold to reset" : "\u00A0"}
+                </span>
+                <span className="control-button__hint" aria-hidden="true">
+                  &nbsp;
                 </span>
               </span>
             </span>
@@ -496,29 +617,79 @@ function App() {
             className="control-button control-button--mode"
             aria-label="Mode"
             aria-describedby="mode-hint"
-            aria-disabled={canSelect ? undefined : true}
-            {...pressHandlers(modePress)}
+            disabled={!canSelect}
+            data-mode-holding={modeHoldProgress > 0 ? "true" : undefined}
+            style={{ "--mode-hold": modeHoldProgress } as CSSProperties}
+            {...(canSelect
+              ? {
+                  onPointerDown: () => {
+                    startModeHold();
+                    modePress.pressDown();
+                  },
+                  onPointerUp: () => {
+                    modePress.pressUp();
+                    stopModeHold();
+                  },
+                  onPointerLeave: () => {
+                    modePress.cancel();
+                    stopModeHold();
+                  },
+                  onPointerCancel: () => {
+                    modePress.cancel();
+                    stopModeHold();
+                  },
+                  onClick: (event: MouseEvent<HTMLButtonElement>) => {
+                    if (event.detail !== 0) {
+                      return;
+                    }
+
+                    modePress.pressDown();
+                    modePress.pressUp();
+                  },
+                }
+              : {})}
           >
+            <span className="control-button__hold-ring" aria-hidden="true" />
             <span className="control-button__content">
               <span className="control-button__icon" aria-hidden="true">
                 <ModeIcon />
               </span>
               <span className="control-button__text">
                 <span className="control-button__label">MODE</span>
-                <span className="control-button__hint" id="mode-hint">
-                  {canSelect
-                    ? "Press: preset · Hold: mode"
-                    : "Locked until reset"}
+                <span className="control-button__hint">
+                  {canSelect ? "PRESS → PRESET" : "RESET TO CHANGE"}
+                </span>
+                <span
+                  className="control-button__hint"
+                  aria-hidden={canSelect ? undefined : true}
+                >
+                  {canSelect ? "HOLD → MODE" : "\u00A0"}
                 </span>
               </span>
+            </span>
+            <span id="mode-hint" className="visually-hidden">
+              {canSelect
+                ? "Press to cycle preset. Hold to change mode."
+                : "Reset to change mode or preset."}
             </span>
           </button>
         </div>
 
-        <p className={`controller-status controller-status--${gamepad.status}`}>
-          <span className="controller-status__dot" aria-hidden="true" />
-          {GAMEPAD_STATUS_TEXT[gamepad.status]}
-        </p>
+        <div className="app-footer__status">
+          {controllerError !== null ? (
+            <p className="controller-status controller-status--error">
+              {controllerError}
+            </p>
+          ) : canSelect ? (
+            <p
+              key={`${state.modeIndex}-${presetIndex}`}
+              className="idle-hint"
+              aria-hidden="true"
+            >
+              Hold for mode
+            </p>
+          ) : null}
+        </div>
       </footer>
     </div>
   );
@@ -564,32 +735,6 @@ function ModeIcon() {
       <path d="M4 13a8 8 0 0 0 14.9 4M20 19v-5h-5" />
     </svg>
   );
-}
-
-/**
- * Bridges a pointer to one recogniser.
- *
- * Only pointer events drive the timing. A real mouse press also emits `click`
- * after pointerup, so `click` is used *only* for keyboard activation, which
- * arrives with `detail === 0` and never follows a pointer press. That is what
- * keeps one press from firing two actions.
- */
-function pressHandlers(recogniser: PressRecogniser) {
-  return {
-    onPointerDown: () => recogniser.pressDown(),
-    onPointerUp: () => recogniser.pressUp(),
-    onPointerLeave: () => recogniser.cancel(),
-    onPointerCancel: () => recogniser.cancel(),
-    onClick: (event: MouseEvent<HTMLButtonElement>) => {
-      if (event.detail !== 0) {
-        return;
-      }
-
-      // Keyboard: one complete short press, with no hold to time.
-      recogniser.pressDown();
-      recogniser.pressUp();
-    },
-  };
 }
 
 export default App;

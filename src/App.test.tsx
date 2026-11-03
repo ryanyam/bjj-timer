@@ -8,9 +8,10 @@ vi.mock("./audio", () => ({
   unlockAudio: vi.fn(),
   playWorkStart: vi.fn(),
   playRestStart: vi.fn(),
+  playModeChange: vi.fn(),
 }));
 
-import { playRestStart, playWorkStart } from "./audio";
+import { playModeChange, playRestStart, playWorkStart } from "./audio";
 
 /**
  * Spec for the Rolls/Drills interface in src/App.tsx.
@@ -47,7 +48,7 @@ function mainLabelText(): string {
 }
 
 function badgeText(): string {
-  return document.querySelector(".status-badge")?.textContent?.trim() ?? "";
+  return document.querySelector(".phase-band")?.textContent?.trim() ?? "";
 }
 
 function phaseText(): string {
@@ -283,23 +284,26 @@ describe("choosing a mode or preset while ready", () => {
     expect(mainElement().getAttribute("data-status")).toBe("ready");
   });
 
-  it("remembers each mode's last selected preset", () => {
+  it("starts a newly selected mode on its first preset", () => {
     render(<App />);
 
     selectPreset(1);
     expect(clockText()).toBe("3:00");
 
     selectMode("DRILLS");
+    expect(clockText()).toBe("2:00");
+    expect(activePreset().textContent?.trim()).toBe("WORK 2:00 / REST 0:30");
+
     selectPreset(1);
     expect(clockText()).toBe("1:00");
 
     selectMode("ROLLS");
-    expect(clockText()).toBe("3:00");
-    expect(activePreset().textContent?.trim()).toBe("WORK 3:00 / REST 1:00");
+    expect(clockText()).toBe("5:00");
+    expect(activePreset().textContent?.trim()).toBe("WORK 5:00 / REST 1:00");
 
     selectMode("DRILLS");
-    expect(clockText()).toBe("1:00");
-    expect(activePreset().textContent?.trim()).toBe("WORK 1:00 / REST 0:30");
+    expect(clockText()).toBe("2:00");
+    expect(activePreset().textContent?.trim()).toBe("WORK 2:00 / REST 0:30");
   });
 
   it("uses the selector's mode and preset actions through the same reducer", () => {
@@ -375,6 +379,19 @@ describe("the Mode button and keyboard selection", () => {
 
     expect(modeContextText()).toBe("DRILLS");
     expect(clockText()).toBe("2:00");
+  });
+
+  it("flashes the new mode name and beeps once on a mode change", () => {
+    render(<App />);
+
+    selectMode("DRILLS");
+    advance(0);
+
+    expect(playModeChange).toHaveBeenCalledTimes(1);
+    expect(document.querySelector(".mode-flash")?.textContent).toBe("DRILLS");
+
+    advance(1_000);
+    expect(document.querySelector(".mode-flash")).toBeNull();
   });
 });
 
@@ -757,23 +774,19 @@ describe("selection while running or paused", () => {
     expect(modeContextText()).toBe("ROLLS");
   });
 
-  it("does not repeat the notice while a white hold remains down", () => {
+  it("makes the on-screen Mode button inert and explains how to unlock it", () => {
     render(<App />);
     pressMainShort();
 
+    expect(modeButton().hasAttribute("disabled")).toBe(true);
+    expect(modeButton().textContent).toContain("RESET TO CHANGE");
+
     fireEvent.pointerDown(modeButton());
-    advance(MODE_BUTTON_HOLD_MS);
-    advance(0);
-    expect(messageText()).toBe("Hold green to reset before changing.");
-
-    advance(NOTICE_MS);
-    expect(document.querySelector(".timer-card__notice")).toBeNull();
-
-    // Still holding: no new blocked attempt should be generated.
-    advance(5 * MODE_BUTTON_HOLD_MS);
-    expect(document.querySelector(".timer-card__notice")).toBeNull();
-
+    advance(MODE_BUTTON_HOLD_MS * 5);
     fireEvent.pointerUp(modeButton());
+    advance(0);
+
+    expect(messageText()).toBe("");
     expect(modeContextText()).toBe("ROLLS");
   });
 

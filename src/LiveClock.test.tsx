@@ -16,22 +16,22 @@ afterEach(() => {
 });
 
 describe("LiveClock", () => {
-  it("shows the local date and time and advances once per second", () => {
+  it("shows the local date and advances the displayed minute", () => {
     const { container } = render(<LiveClock locale="en-US" />);
 
     expect(
       container.querySelector(".app-clock__date")?.textContent?.trim(),
     ).toBe("TUE, NOV 3, 2026");
-    expect(clockTime(container)).toBe("10:44:45");
+    expect(clockTime(container)).toBe("10:44");
     expect(
       container.querySelector(".app-clock__period")?.textContent?.trim(),
     ).toBe("AM");
 
     act(() => {
-      vi.advanceTimersByTime(1_000);
+      vi.advanceTimersByTime(60_000);
     });
 
-    expect(clockTime(container)).toBe("10:44:46");
+    expect(clockTime(container)).toBe("10:45");
   });
 
   it("clears its own interval on unmount", () => {

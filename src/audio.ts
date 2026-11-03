@@ -87,7 +87,10 @@ function play(cues: readonly (readonly [number, number, number])[]): void {
   };
 
   if (audio.state === "suspended") {
-    void audio.resume().then(schedule).catch(() => {});
+    void audio
+      .resume()
+      .then(schedule)
+      .catch(() => {});
   } else {
     schedule();
   }
@@ -104,4 +107,9 @@ export function playWorkStart(): void {
 /** One lower, longer tone: work has ended and rest has begun. */
 export function playRestStart(): void {
   play([[440, 0, 0.28]]);
+}
+
+/** One short confirmation beep: the main mode has changed. */
+export function playModeChange(): void {
+  play([[660, 0, 0.11]]);
 }

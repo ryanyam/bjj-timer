@@ -137,6 +137,24 @@ export function phaseLabel(state: RoundState): string {
   return state.phase === "rest" ? "REST" : "WORK";
 }
 
+/** The single large phase word above the countdown. */
+export function phaseHeadline(state: RoundState): string {
+  if (state.status === "ready") {
+    return "READY";
+  }
+
+  if (state.status === "paused") {
+    return "PAUSED";
+  }
+
+  return phaseLabel(state);
+}
+
+/** True while a running phase is in its final ten seconds. */
+export function inFinalTen(state: RoundState, now: number): boolean {
+  return state.status === "running" && displayMs(state, now) <= 10 * 1_000;
+}
+
 export type StatusTone = "ready" | "work" | "rest" | "paused";
 
 /** The visual/status tone for the phase badge, always paired with text. */
@@ -352,7 +370,13 @@ function selectModeAt(state: RoundState, modeIndex: number): RoundState {
     return state;
   }
 
-  return readySelection(state, modeIndex, state.presetIndexByMode);
+  // A mode change starts on that mode's first preset. Per-mode memory is kept
+  // for the current session but is not restored when switching modes.
+  const presetIndexByMode = state.presetIndexByMode.map((value, index) =>
+    index === modeIndex ? DEFAULT_PRESET_INDEX : value,
+  );
+
+  return readySelection(state, modeIndex, presetIndexByMode);
 }
 
 function selectPresetAt(state: RoundState, presetIndex: number): RoundState {

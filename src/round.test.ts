@@ -73,7 +73,7 @@ describe("the initial session", () => {
   });
 
   it("remembers a default preset for every mode", () => {
-    expect(initialRoundState.presetIndexByMode).toEqual([0, 0]);
+    expect(initialRoundState.presetIndexByMode).toEqual([0, 0, 0]);
   });
 });
 
@@ -101,8 +101,8 @@ describe("starting", () => {
 
     const startedDrills = reduce(chosen, { type: "mainShort", now: T0 });
 
-    expect(startedDrills.deadline).toBe(T0 + 1 * MINUTE);
-    expect(displayMs(startedDrills, T0)).toBe(1 * MINUTE);
+    expect(startedDrills.deadline).toBe(T0 + 3 * MINUTE);
+    expect(displayMs(startedDrills, T0)).toBe(3 * MINUTE);
     expect(phaseLabel(startedDrills)).toBe("WORK");
     expect(startedDrills.transitionSeq).toBe(1);
   });
@@ -298,7 +298,7 @@ describe("reset", () => {
 
     expect(currentMode(resetState).title).toBe("DRILLS");
     expect(currentPresetIndex(resetState)).toBe(1);
-    expect(displayMs(resetState, T0)).toBe(1 * MINUTE);
+    expect(displayMs(resetState, T0)).toBe(3 * MINUTE);
   });
 
   it("does not fire a cue", () => {
@@ -347,16 +347,16 @@ describe("mode and preset selection while ready", () => {
 
     expect(currentMode(rollsSecond).title).toBe("DRILLS");
     expect(currentPresetIndex(rollsSecond)).toBe(1);
-    expect(displayMs(rollsSecond, T0)).toBe(1 * MINUTE);
+    expect(displayMs(rollsSecond, T0)).toBe(3 * MINUTE);
 
-    const backToRolls = reduce(rollsSecond, nextMode);
+    const backToRolls = run(rollsSecond, [nextMode, nextMode]);
 
     expect(currentMode(backToRolls).title).toBe("ROLLS");
     expect(currentPresetIndex(backToRolls)).toBe(0);
     expect(displayMs(backToRolls, T0)).toBe(5 * MINUTE);
   });
 
-  it("cycles presets in order and wraps within the current mode", () => {
+  it("cycles Rolls and all four Drills presets in order and wraps", () => {
     const rolls = [0, 1, 2].map((presses) =>
       run(
         initialRoundState,
@@ -366,18 +366,47 @@ describe("mode and preset selection while ready", () => {
 
     expect(rolls.map(currentPresetIndex)).toEqual([0, 1, 0]);
 
-    const drills = run(initialRoundState, [
-      { type: "selectMode", modeIndex: 1 },
-      nextPreset,
-      nextPreset,
-    ]);
+    const drills = [0, 1, 2, 3, 4].map((presses) =>
+      run(
+        initialRoundState,
+        [
+          { type: "selectMode", modeIndex: 1 },
+          ...Array.from({ length: presses }, () => nextPreset),
+        ],
+      ),
+    );
 
-    expect(currentMode(drills).title).toBe("DRILLS");
-    expect(currentPresetIndex(drills)).toBe(0);
+    expect(drills.map(currentPresetIndex)).toEqual([0, 1, 2, 3, 0]);
+    expect(drills.map(currentWorkMs)).toEqual([
+      2 * MINUTE,
+      3 * MINUTE,
+      5 * MINUTE,
+      1 * MINUTE,
+      2 * MINUTE,
+    ]);
+    expect(drills.map(currentRestMs)).toEqual([
+      30 * SECOND,
+      30 * SECOND,
+      30 * SECOND,
+      30 * SECOND,
+      30 * SECOND,
+    ]);
   });
 
-  it("cycles main modes Rolls -> Drills -> Rolls", () => {
-    const labels = [0, 1, 2].map(
+  it("loads the Kids 30-second work / 5-second rest default", () => {
+    const kids = reduce(initialRoundState, {
+      type: "selectMode",
+      modeIndex: 2,
+    });
+
+    expect(currentMode(kids).title).toBe("KIDS");
+    expect(currentPresetIndex(kids)).toBe(0);
+    expect(currentWorkMs(kids)).toBe(30 * SECOND);
+    expect(currentRestMs(kids)).toBe(5 * SECOND);
+  });
+
+  it("cycles main modes Rolls -> Drills -> Kids -> Rolls", () => {
+    const labels = [0, 1, 2, 3].map(
       (presses) =>
         currentMode(
           run(
@@ -387,7 +416,7 @@ describe("mode and preset selection while ready", () => {
         ).title,
     );
 
-    expect(labels).toEqual(["ROLLS", "DRILLS", "ROLLS"]);
+    expect(labels).toEqual(["ROLLS", "DRILLS", "KIDS", "ROLLS"]);
   });
 
   it("does not restart a cue or a blocked-attempt message", () => {
@@ -530,7 +559,7 @@ describe("labels and previews", () => {
       { type: "selectPreset", presetIndex: 1 },
     ]);
 
-    expect(currentWorkMs(drillsSecond)).toBe(1 * MINUTE);
+    expect(currentWorkMs(drillsSecond)).toBe(3 * MINUTE);
     expect(currentRestMs(drillsSecond)).toBe(30 * SECOND);
   });
 });

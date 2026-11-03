@@ -17,7 +17,7 @@ export function formatClock(date: Date, locale?: string): ClockParts {
   }).format(date);
 
   const parts = new Intl.DateTimeFormat(locale, {
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
     hour12: true,
   }).formatToParts(date);

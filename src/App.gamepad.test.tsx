@@ -110,9 +110,8 @@ function phaseText(): string {
 }
 
 function modeContextText(): string {
-  return document.querySelector(".app")?.getAttribute("data-mode") === "drills"
-    ? "DRILLS"
-    : "ROLLS";
+  const mode = document.querySelector(".app")?.getAttribute("data-mode");
+  return mode === "drills" ? "DRILLS" : mode === "kids" ? "KIDS" : "ROLLS";
 }
 
 function roundText(): string {
@@ -183,6 +182,7 @@ beforeEach(() => {
   resetGetReadySettings();
   setGetReadySecondsForMode("rolls", 0);
   setGetReadySecondsForMode("drills", 0);
+  setGetReadySecondsForMode("kids", 0);
 
   Object.defineProperty(document, "visibilityState", {
     configurable: true,
@@ -398,6 +398,15 @@ describe("the white MODE/OPTION button", () => {
     setMode(pad, false);
     frameAt(400 + MODE_BUTTON_HOLD_MS + 16);
 
+    expect(modeContextText()).toBe("KIDS");
+    expect(clockText()).toBe("0:30");
+
+    setMode(pad, true);
+    frameAt(700);
+    frameAt(700 + MODE_BUTTON_HOLD_MS);
+    setMode(pad, false);
+    frameAt(700 + MODE_BUTTON_HOLD_MS + 16);
+
     expect(modeContextText()).toBe("ROLLS");
     expect(clockText()).toBe("5:00");
   });
@@ -417,16 +426,25 @@ describe("the white MODE/OPTION button", () => {
     frameAt(200 + MODE_BUTTON_HOLD_MS + 16);
     expect(clockText()).toBe("2:00");
 
-    // Drills -> preset 2.
+    // Drills -> second preset.
     tapMode(pad, 400);
-    expect(clockText()).toBe("1:00");
+    expect(clockText()).toBe("3:00");
 
-    // Back to Rolls: its first preset again.
+    // Drills -> Kids: its first preset.
     setMode(pad, true);
     frameAt(500);
     frameAt(500 + MODE_BUTTON_HOLD_MS);
     setMode(pad, false);
     frameAt(500 + MODE_BUTTON_HOLD_MS + 16);
+    expect(modeContextText()).toBe("KIDS");
+    expect(clockText()).toBe("0:30");
+
+    // Kids -> Rolls: its first preset again.
+    setMode(pad, true);
+    frameAt(700);
+    frameAt(700 + MODE_BUTTON_HOLD_MS);
+    setMode(pad, false);
+    frameAt(700 + MODE_BUTTON_HOLD_MS + 16);
 
     expect(modeContextText()).toBe("ROLLS");
     expect(clockText()).toBe("5:00");

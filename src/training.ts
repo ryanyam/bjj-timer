@@ -8,7 +8,7 @@
 
 import { formatRemaining } from "./timer";
 
-export type ModeId = "rolls" | "drills";
+export type ModeId = "rolls" | "drills" | "kids";
 
 export interface Preset {
   readonly id: string;
@@ -18,7 +18,7 @@ export interface Preset {
 
 export interface TrainingMode {
   readonly id: ModeId;
-  readonly title: "ROLLS" | "DRILLS";
+  readonly title: "ROLLS" | "DRILLS" | "KIDS";
   readonly presets: readonly Preset[];
 }
 
@@ -39,7 +39,16 @@ export const TRAINING_MODES: readonly TrainingMode[] = [
     title: "DRILLS",
     presets: [
       { id: "drills-2-30", workMs: 2 * MINUTE, restMs: 30 * SECOND },
+      { id: "drills-3-30", workMs: 3 * MINUTE, restMs: 30 * SECOND },
+      { id: "drills-5-30", workMs: 5 * MINUTE, restMs: 30 * SECOND },
       { id: "drills-1-30", workMs: 1 * MINUTE, restMs: 30 * SECOND },
+    ],
+  },
+  {
+    id: "kids",
+    title: "KIDS",
+    presets: [
+      { id: "kids-30-5", workMs: 30 * SECOND, restMs: 5 * SECOND },
     ],
   },
 ];

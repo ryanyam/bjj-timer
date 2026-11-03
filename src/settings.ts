@@ -7,6 +7,7 @@ export type GetReadySeconds = (typeof GET_READY_OPTIONS)[number];
 const DEFAULTS: Record<ModeId, GetReadySeconds> = {
   rolls: 5,
   drills: 3,
+  kids: 3,
 };
 
 const STORAGE_KEY = "bjj-timer.get-ready-seconds";

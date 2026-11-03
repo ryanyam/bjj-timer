@@ -34,6 +34,28 @@ describe("LiveClock", () => {
     expect(clockTime(container)).toBe("10:45");
   });
 
+  it("rolls the shared date and clock over at midnight", () => {
+    vi.setSystemTime(new Date(2026, 11, 31, 23, 59, 50));
+    const { container } = render(<LiveClock locale="en-US" />);
+
+    expect(
+      container.querySelector(".app-clock__date")?.textContent?.trim(),
+    ).toBe("Thu, Dec 31");
+    expect(clockTime(container)).toBe("11:59");
+
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+
+    expect(
+      container.querySelector(".app-clock__date")?.textContent?.trim(),
+    ).toBe("Fri, Jan 1");
+    expect(clockTime(container)).toBe("12:00");
+    expect(
+      container.querySelector(".app-clock__period")?.textContent?.trim(),
+    ).toBe("AM");
+  });
+
   it("clears its own interval on unmount", () => {
     const { unmount } = render(<LiveClock locale="en-US" />);
 

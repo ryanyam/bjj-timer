@@ -90,9 +90,8 @@ function phaseHeadlineText(): string {
 }
 
 function modeContextText(): string {
-  return document.querySelector(".app")?.getAttribute("data-mode") === "drills"
-    ? "DRILLS"
-    : "ROLLS";
+  const mode = document.querySelector(".app")?.getAttribute("data-mode");
+  return mode === "drills" ? "DRILLS" : mode === "kids" ? "KIDS" : "ROLLS";
 }
 
 function roundText(): string {
@@ -125,6 +124,18 @@ function pausedBadge(): HTMLElement | null {
   return document.querySelector(".status-badge--paused");
 }
 
+function progressWarning(): boolean {
+  return (
+    document
+      .querySelector(".progress-bar")
+      ?.classList.contains("progress-bar--warning") ?? false
+  );
+}
+
+function statusBandClass(): string {
+  return document.querySelector(".status-strip")?.className ?? "";
+}
+
 function modeRow(): HTMLElement {
   return screen.getByRole("group", { name: "Main mode" });
 }
@@ -133,7 +144,7 @@ function presetRow(): HTMLElement {
   return screen.getByRole("group", { name: "Preset" });
 }
 
-function modeOption(name: "ROLLS" | "DRILLS"): HTMLElement {
+function modeOption(name: "ROLLS" | "DRILLS" | "KIDS"): HTMLElement {
   return within(modeRow()).getByRole("button", { name });
 }
 
@@ -196,7 +207,7 @@ function pressModeLong(): void {
   longPress(modeButton(), MODE_BUTTON_HOLD_MS);
 }
 
-function selectMode(name: "ROLLS" | "DRILLS"): void {
+function selectMode(name: "ROLLS" | "DRILLS" | "KIDS"): void {
   fireEvent.click(modeOption(name));
 }
 
@@ -223,6 +234,7 @@ beforeEach(() => {
   resetGetReadySettings();
   setGetReadySecondsForMode("rolls", 0);
   setGetReadySecondsForMode("drills", 0);
+  setGetReadySecondsForMode("kids", 0);
 });
 
 afterEach(() => {
@@ -308,6 +320,7 @@ describe("Get Ready countdown", () => {
 
   it("starts immediately when the configured duration is zero", () => {
     setGetReadySecondsForMode("drills", 0);
+  setGetReadySecondsForMode("kids", 0);
     render(<App />);
     selectMode("DRILLS");
 
@@ -420,18 +433,21 @@ describe("the initial selection", () => {
     expect(options.map((button) => button.textContent?.trim())).toEqual([
       "ROLLS",
       "DRILLS",
+      "KIDS",
     ]);
     expect(modeOption("ROLLS").getAttribute("aria-pressed")).toBe("true");
     expect(modeOption("DRILLS").getAttribute("aria-pressed")).toBe("false");
+    expect(modeOption("KIDS").getAttribute("aria-pressed")).toBe("false");
     expect(modeOption("ROLLS").getAttribute("data-selected")).toBe("true");
     expect(modeOption("DRILLS").getAttribute("data-selected")).toBeNull();
+    expect(modeOption("KIDS").getAttribute("data-selected")).toBeNull();
   });
 
   it("shows only the selected mode's presets, once each, with the active one explicit", () => {
     render(<App />);
 
-    expect(presetLabels()).toEqual(["WORK 5:00 / REST 1:00", "3:00 / 1:00"]);
-    expect(activePreset().textContent?.trim()).toBe("WORK 5:00 / REST 1:00");
+    expect(presetLabels()).toEqual(["5:00 / 1:00", "3:00 / 1:00"]);
+    expect(activePreset().textContent?.trim()).toBe("5:00 / 1:00");
     expect(activePreset().getAttribute("aria-pressed")).toBe("true");
     expect(presetOptions()[1].getAttribute("aria-pressed")).toBe("false");
   });
@@ -467,7 +483,12 @@ describe("choosing a mode or preset while ready", () => {
     expect(phaseText()).toBe("WORK");
     expect(modeContextText()).toBe("DRILLS");
     expect(nextText()).toBe("NEXT: WORK 2:00");
-    expect(presetLabels()).toEqual(["WORK 2:00 / REST 0:30", "1:00 / 0:30"]);
+    expect(presetLabels()).toEqual([
+      "2:00 / 0:30",
+      "3:00 / 0:30",
+      "5:00 / 0:30",
+      "1:00 / 0:30",
+    ]);
     expect(modeOption("DRILLS").getAttribute("aria-pressed")).toBe("true");
     expect(modeOption("ROLLS").getAttribute("aria-pressed")).toBe("false");
     expect(mainElement().getAttribute("data-mode")).toBe("drills");
@@ -479,7 +500,7 @@ describe("choosing a mode or preset while ready", () => {
     selectPreset(1);
 
     expect(clockText()).toBe("3:00");
-    expect(activePreset().textContent?.trim()).toBe("WORK 3:00 / REST 1:00");
+    expect(activePreset().textContent?.trim()).toBe("3:00 / 1:00");
     expect(presetLabels()[0]).toBe("5:00 / 1:00");
     expect(mainLabelText()).toBe("Start");
     expect(roundText()).toBe("ROUND 1");
@@ -494,18 +515,18 @@ describe("choosing a mode or preset while ready", () => {
 
     selectMode("DRILLS");
     expect(clockText()).toBe("2:00");
-    expect(activePreset().textContent?.trim()).toBe("WORK 2:00 / REST 0:30");
+    expect(activePreset().textContent?.trim()).toBe("2:00 / 0:30");
 
     selectPreset(1);
-    expect(clockText()).toBe("1:00");
+    expect(clockText()).toBe("3:00");
 
     selectMode("ROLLS");
     expect(clockText()).toBe("5:00");
-    expect(activePreset().textContent?.trim()).toBe("WORK 5:00 / REST 1:00");
+    expect(activePreset().textContent?.trim()).toBe("5:00 / 1:00");
 
     selectMode("DRILLS");
     expect(clockText()).toBe("2:00");
-    expect(activePreset().textContent?.trim()).toBe("WORK 2:00 / REST 0:30");
+    expect(activePreset().textContent?.trim()).toBe("2:00 / 0:30");
   });
 
   it("uses the selector's mode and preset actions through the same reducer", () => {
@@ -517,7 +538,7 @@ describe("choosing a mode or preset while ready", () => {
     // The Mode button then cycles from exactly the same selected state.
     pressModeShort();
 
-    expect(activePreset().textContent?.trim()).toBe("WORK 1:00 / REST 0:30");
+    expect(activePreset().textContent?.trim()).toBe("3:00 / 0:30");
   });
 });
 
@@ -542,12 +563,45 @@ describe("the Mode button and keyboard selection", () => {
 
     expect(modeContextText()).toBe("DRILLS");
     expect(clockText()).toBe("2:00");
-    expect(activePreset().textContent?.trim()).toBe("WORK 2:00 / REST 0:30");
+    expect(activePreset().textContent?.trim()).toBe("2:00 / 0:30");
+
+    pressModeLong();
+
+    expect(modeContextText()).toBe("KIDS");
+    expect(clockText()).toBe("0:30");
 
     pressModeLong();
 
     expect(modeContextText()).toBe("ROLLS");
     expect(clockText()).toBe("5:00");
+  });
+
+  it("cycles the full Drills preset sequence and wraps", () => {
+    render(<App />);
+    selectMode("DRILLS");
+
+    const seen: string[] = [clockText()];
+    for (let press = 0; press < 4; press += 1) {
+      pressModeShort();
+      seen.push(clockText());
+    }
+
+    expect(seen).toEqual(["2:00", "3:00", "5:00", "1:00", "2:00"]);
+  });
+
+  it("loads Kids at 30 seconds work / 5 seconds rest", () => {
+    render(<App />);
+    selectMode("KIDS");
+
+    expect(clockText()).toBe("0:30");
+    expect(nextText()).toBe("NEXT: WORK 0:30");
+    expect(presetLabels()).toEqual(["0:30 / 0:05"]);
+
+    pressMainShort();
+    advance(30 * SECOND);
+    expect(phaseText()).toBe("REST");
+    expect(clockText()).toBe("0:05");
+    expect(nextText()).toBe("NEXT: WORK 0:30");
   });
 
   it("switches mode at 800 ms, not earlier, and release does nothing extra", () => {
@@ -563,7 +617,7 @@ describe("the Mode button and keyboard selection", () => {
     fireEvent.pointerUp(modeButton());
 
     expect(modeContextText()).toBe("DRILLS");
-    expect(activePreset().textContent?.trim()).toBe("WORK 2:00 / REST 0:30");
+    expect(activePreset().textContent?.trim()).toBe("2:00 / 0:30");
   });
 
   it("selects the next preset from keyboard activation of the Mode button", () => {
@@ -653,14 +707,14 @@ describe("running a work/rest session", () => {
     selectPreset(1);
     pressMainShort();
 
-    expect(clockText()).toBe("1:00");
+    expect(clockText()).toBe("3:00");
     expect(nextText()).toBe("NEXT: REST 0:30");
 
-    advance(1 * MINUTE);
+    advance(3 * MINUTE);
 
     expect(phaseText()).toBe("REST");
     expect(clockText()).toBe("0:30");
-    expect(nextText()).toBe("NEXT: WORK 1:00");
+    expect(nextText()).toBe("NEXT: WORK 3:00");
   });
 
   it("does not fire a second cue from a delayed, repeated render", () => {
@@ -709,6 +763,57 @@ describe("running a work/rest session", () => {
     expect(workCue).not.toHaveBeenCalled();
     expect(restCue).not.toHaveBeenCalled();
     expect(clockText()).toBe("5:00");
+  });
+});
+
+describe("final-seconds warning", () => {
+  it("starts at ten displayed seconds, stays static when paused, and clears on the next phase", () => {
+    render(<App />);
+    selectMode("KIDS");
+    pressMainShort();
+
+    advance(19 * SECOND);
+    expect(clockText()).toBe("0:11");
+    expect(progressWarning()).toBe(false);
+    expect(statusBandClass()).toContain("status-strip--work");
+
+    advance(SECOND);
+    expect(clockText()).toBe("0:10");
+    expect(progressWarning()).toBe(true);
+    expect(statusBandClass()).not.toContain("status-strip--urgent");
+
+    pressMainShort();
+    expect(pausedBadge()).not.toBeNull();
+    expect(progressWarning()).toBe(true);
+
+    advance(5 * SECOND);
+    expect(clockText()).toBe("0:10");
+    expect(progressWarning()).toBe(true);
+
+    pressMainShort();
+    advance(10 * SECOND);
+    expect(phaseText()).toBe("REST");
+    expect(clockText()).toBe("0:05");
+    expect(progressWarning()).toBe(true);
+
+    advance(5 * SECOND);
+    expect(phaseText()).toBe("WORK");
+    expect(clockText()).toBe("0:30");
+    expect(progressWarning()).toBe(false);
+  });
+
+  it("clears the warning on reset", () => {
+    render(<App />);
+    selectMode("KIDS");
+    pressMainShort();
+    advance(20 * SECOND);
+    expect(progressWarning()).toBe(true);
+
+    pressMainLong();
+
+    expect(clockText()).toBe("0:30");
+    expect(progressWarning()).toBe(false);
+    expect(statusBandClass()).toContain("status-strip--ready");
   });
 });
 
@@ -773,11 +878,11 @@ describe("pause, resume and reset", () => {
     pressMainLong();
 
     expect(mainLabelText()).toBe("Start");
-    expect(clockText()).toBe("1:00");
+    expect(clockText()).toBe("3:00");
     expect(phaseText()).toBe("WORK");
     expect(modeContextText()).toBe("DRILLS");
     expect(roundText()).toBe("ROUND 1");
-    expect(nextText()).toBe("NEXT: WORK 1:00");
+    expect(nextText()).toBe("NEXT: WORK 3:00");
     expect(pausedBadge()).toBeNull();
     expect(mainElement().getAttribute("data-status")).toBe("ready");
     expect(workCue).not.toHaveBeenCalled();

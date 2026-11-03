@@ -15,7 +15,13 @@ import {
  * round state changes, so a new phase resets the fill, pause freezes it, and a
  * running phase animates without re-rendering React on every frame.
  */
-export function PhaseProgressBar({ state }: { state: RoundState }) {
+export function PhaseProgressBar({
+  state,
+  warning = false,
+}: {
+  state: RoundState;
+  warning?: boolean;
+}) {
   const fillRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
@@ -76,7 +82,10 @@ export function PhaseProgressBar({ state }: { state: RoundState }) {
   }, [state]);
 
   return (
-    <div className="progress-bar" aria-hidden="true">
+    <div
+      className={`progress-bar${warning ? " progress-bar--warning" : ""}`}
+      aria-hidden="true"
+    >
       <span ref={fillRef} className="progress-bar__fill" />
     </div>
   );

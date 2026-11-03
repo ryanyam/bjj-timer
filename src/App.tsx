@@ -14,7 +14,6 @@ import {
   currentPreset,
   currentPresetIndex,
   displayMs,
-  inFinalTen,
   initialRoundState,
   mainLabel,
   nextPhase,
@@ -77,9 +76,11 @@ function App() {
   const presetIndex = currentPresetIndex(state);
   const preview = nextPhase(state);
   const canSelect = selectionAllowed(state);
-  const tone = statusTone(state);
   const headline = phaseHeadline(state);
-  const urgent = inFinalTen(state, now);
+  const warning =
+    (state.status === "running" || state.status === "paused") &&
+    displayMs(state, now) <= 10_000;
+  const tone = statusTone(state);
 
   /*
    * Pointer/touch hold progress uses the same threshold and clock-based timing
@@ -514,19 +515,27 @@ function App() {
       <main className="app-main">
         <div className="app-main__stage">
           <div
-            className={`phase-band status-badge status-badge--${tone} phase-band--${tone}${urgent ? " phase-band--urgent" : ""}`}
-            data-phase={state.phase}
+            key={formatRemaining(displayMs(state, now))}
+            className={`status-strip status-strip--${tone}${state.status === "paused" ? " status-badge--paused" : ""}`}
             role="status"
             aria-live="polite"
           >
-            <span className="phase-band__label">{headline}</span>
+            <span className="status-strip__side meta-item meta-item--round">{`ROUND ${state.round}`}</span>
+            <span className="status-strip__main phase-band__label">
+              {state.status === "paused"
+                ? `${state.phase === "rest" ? "REST" : "WORK"} · PAUSED`
+                : headline}
+            </span>
+            <span className="status-strip__side status-strip__side--right meta-item">
+              {`NEXT: ${preview.label} ${formatRemaining(preview.ms)}`}
+            </span>
           </div>
 
           <div className="app-countdown" role="timer">
             {formatRemaining(displayMs(state, now))}
           </div>
 
-          <PhaseProgressBar state={state} />
+          <PhaseProgressBar state={state} warning={warning} />
 
           <section
             className="timer-card"
@@ -562,7 +571,7 @@ function App() {
                   </div>
 
                   <div className="selector-group">
-                    <span className="selector-label">PRESET</span>
+                    <span className="selector-label">PRESET · WORK / REST</span>
                     <div
                       className="selector-row"
                       role="group"
@@ -580,9 +589,7 @@ function App() {
                             aria-pressed={selected}
                             onClick={() => choosePreset(index)}
                           >
-                            {selected
-                              ? fullPresetLabel(option)
-                              : compactPresetLabel(option)}
+                            {compactPresetLabel(option)}
                           </button>
                         );
                       })}
@@ -609,19 +616,7 @@ function App() {
                 >
                   {notice}
                 </span>
-              ) : (
-                <>
-                  <span className="meta-item meta-item--round">
-                    {`ROUND ${state.round}`}
-                  </span>
-                  <span className="meta-separator" aria-hidden="true">
-                    ·
-                  </span>
-                  <span className="meta-item">
-                    {`NEXT: ${preview.label} ${formatRemaining(preview.ms)}`}
-                  </span>
-                </>
-              )}
+              ) : null}
             </div>
           </section>
 

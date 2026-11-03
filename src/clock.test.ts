@@ -17,7 +17,7 @@ describe("formatClock", () => {
 
     expect(formatClock(afternoon, "en-US")).toEqual({
       date: "Tue, Nov 3",
-      time: "03:05",
+      time: "3:05",
       period: "PM",
     });
   });

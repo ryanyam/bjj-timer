@@ -18,14 +18,13 @@ export function LiveClock({ locale }: { locale?: string } = {}) {
 
   return (
     <div className="app-clock" aria-label="Current local date and time">
-      <span className="app-clock__date">{date}</span>
-      <span className="app-clock__separator" aria-hidden="true">
-        ·
+      <span className="app-clock__datetime">
+        <span className="app-clock__date">{date}</span>
+        <time className="app-clock__time" dateTime={now.toISOString()}>
+          {time}
+        </time>
+        {period !== "" && <span className="app-clock__period">{period}</span>}
       </span>
-      <time className="app-clock__time" dateTime={now.toISOString()}>
-        {time}
-      </time>
-      {period !== "" && <span className="app-clock__period">{period}</span>}
     </div>
   );
 }

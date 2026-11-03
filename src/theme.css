@@ -15,17 +15,25 @@
 
 :root {
   /* Approved gym palette */
-  --paper: #f4f4f2;
+  --paper: #f7f7f5;
   --ink: #0a0a0a;
-  --charcoal: #4c4d4e;
-  --silver: #a7a9ac;
-  --gold: #c9a227;
+  --charcoal: #525252;
+  --silver: #dededa;
+  --gold: #ffc600;
+
+  /* Subtle status-band surfaces */
+  --band-ready: #f4f4f1;
+  --band-work: #fff4cc;
+  --band-rest: #efefec;
+  --band-paused: #f4f4f1;
 
   /* Derived, accessible shades from the same palette */
   --gold-progress: #b07a00;
   --gold-dim: #e6dbb7;
   --charcoal-dim: #5d5e5f;
-  --red: #b3261e;
+  --red: #b42318;
+  --progress-fill: #a6a6a1;
+  --warning-track: #f4dedb;
   --transparent: transparent;
 
   /* Type */

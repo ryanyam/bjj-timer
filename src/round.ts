@@ -132,9 +132,9 @@ export function mainLabel(state: RoundState): string {
   }
 }
 
-/** ROLL / DRILL during work, REST for either mode's rest phase. */
+/** WORK during work, REST for either mode's rest phase. */
 export function phaseLabel(state: RoundState): string {
-  return state.phase === "rest" ? "REST" : currentMode(state).workLabel;
+  return state.phase === "rest" ? "REST" : "WORK";
 }
 
 /** What follows the current (or, while ready, the first) phase. */
@@ -144,10 +144,8 @@ export interface PhasePreview {
 }
 
 export function nextPhase(state: RoundState): PhasePreview {
-  const mode = currentMode(state);
-
   if (state.status === "ready" || state.phase === "rest") {
-    return { label: mode.workLabel, ms: currentWorkMs(state) };
+    return { label: "WORK", ms: currentWorkMs(state) };
   }
 
   return { label: "REST", ms: currentRestMs(state) };

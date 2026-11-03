@@ -63,9 +63,9 @@ describe("the initial session", () => {
     expect(displayMs(initialRoundState, T0)).toBe(5 * MINUTE);
     expect(selectionAllowed(initialRoundState)).toBe(true);
     expect(mainLabel(initialRoundState)).toBe("Start");
-    expect(phaseLabel(initialRoundState)).toBe("ROLL");
+    expect(phaseLabel(initialRoundState)).toBe("WORK");
     expect(nextPhase(initialRoundState)).toEqual({
-      label: "ROLL",
+      label: "WORK",
       ms: 5 * MINUTE,
     });
   });
@@ -101,7 +101,7 @@ describe("starting", () => {
 
     expect(startedDrills.deadline).toBe(T0 + 1 * MINUTE);
     expect(displayMs(startedDrills, T0)).toBe(1 * MINUTE);
-    expect(phaseLabel(startedDrills)).toBe("DRILL");
+    expect(phaseLabel(startedDrills)).toBe("WORK");
     expect(startedDrills.transitionSeq).toBe(1);
   });
 });
@@ -116,7 +116,7 @@ describe("the repeating work-rest cycle", () => {
     expect(state.deadline).toBe(T0 + 6 * MINUTE);
     expect(displayMs(state, T0 + 5 * MINUTE)).toBe(1 * MINUTE);
     expect(phaseLabel(state)).toBe("REST");
-    expect(nextPhase(state)).toEqual({ label: "ROLL", ms: 5 * MINUTE });
+    expect(nextPhase(state)).toEqual({ label: "WORK", ms: 5 * MINUTE });
     expect(state.transitionSeq).toBe(2);
     expect(state.lastTransition).toBe("rest");
   });
@@ -321,7 +321,7 @@ describe("mode and preset selection while ready", () => {
     expect(state.phase).toBe("work");
     expect(state.round).toBe(1);
     expect(displayMs(state, T0)).toBe(2 * MINUTE);
-    expect(nextPhase(state)).toEqual({ label: "DRILL", ms: 2 * MINUTE });
+    expect(nextPhase(state)).toEqual({ label: "WORK", ms: 2 * MINUTE });
   });
 
   it("selects a preset and loads its full work duration", () => {
@@ -470,13 +470,13 @@ describe("selection is locked while running or paused", () => {
 });
 
 describe("labels and previews", () => {
-  it("uses ROLL, DRILL and REST as phase labels", () => {
+  it("uses WORK and REST as phase labels", () => {
     const drills = run(initialRoundState, [
       { type: "selectMode", modeIndex: 1 },
     ]);
 
-    expect(phaseLabel(initialRoundState)).toBe("ROLL");
-    expect(phaseLabel(drills)).toBe("DRILL");
+    expect(phaseLabel(initialRoundState)).toBe("WORK");
+    expect(phaseLabel(drills)).toBe("WORK");
     expect(phaseLabel(ticked(started(T0), T0 + 5 * MINUTE))).toBe("REST");
   });
 
@@ -484,14 +484,14 @@ describe("labels and previews", () => {
     const rest = ticked(started(T0), T0 + 5 * MINUTE);
 
     expect(nextPhase(initialRoundState)).toEqual({
-      label: "ROLL",
+      label: "WORK",
       ms: 5 * MINUTE,
     });
     expect(nextPhase(started(T0))).toEqual({
       label: "REST",
       ms: 1 * MINUTE,
     });
-    expect(nextPhase(rest)).toEqual({ label: "ROLL", ms: 5 * MINUTE });
+    expect(nextPhase(rest)).toEqual({ label: "WORK", ms: 5 * MINUTE });
   });
 
   it("names Start, Pause and Resume for the primary action", () => {

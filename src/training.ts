@@ -9,7 +9,6 @@
 import { formatRemaining } from "./timer";
 
 export type ModeId = "rolls" | "drills";
-export type WorkLabel = "ROLL" | "DRILL";
 
 export interface Preset {
   readonly id: string;
@@ -20,7 +19,6 @@ export interface Preset {
 export interface TrainingMode {
   readonly id: ModeId;
   readonly title: "ROLLS" | "DRILLS";
-  readonly workLabel: WorkLabel;
   readonly presets: readonly Preset[];
 }
 
@@ -31,7 +29,6 @@ export const TRAINING_MODES: readonly TrainingMode[] = [
   {
     id: "rolls",
     title: "ROLLS",
-    workLabel: "ROLL",
     presets: [
       { id: "rolls-5-1", workMs: 5 * MINUTE, restMs: 1 * MINUTE },
       { id: "rolls-3-1", workMs: 3 * MINUTE, restMs: 1 * MINUTE },
@@ -40,7 +37,6 @@ export const TRAINING_MODES: readonly TrainingMode[] = [
   {
     id: "drills",
     title: "DRILLS",
-    workLabel: "DRILL",
     presets: [
       { id: "drills-2-30", workMs: 2 * MINUTE, restMs: 30 * SECOND },
       { id: "drills-1-30", workMs: 1 * MINUTE, restMs: 30 * SECOND },
@@ -55,10 +51,7 @@ export function modeAt(modeIndex: number): TrainingMode {
   return TRAINING_MODES[modeIndex] ?? TRAINING_MODES[DEFAULT_MODE_INDEX];
 }
 
-export function presetAt(
-  modeIndex: number,
-  presetIndex: number,
-): Preset {
+export function presetAt(modeIndex: number, presetIndex: number): Preset {
   const mode = modeAt(modeIndex);
 
   return mode.presets[presetIndex] ?? mode.presets[DEFAULT_PRESET_INDEX];

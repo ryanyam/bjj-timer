@@ -19,10 +19,6 @@ describe("the training definitions", () => {
       "ROLLS",
       "DRILLS",
     ]);
-    expect(TRAINING_MODES.map((mode) => mode.workLabel)).toEqual([
-      "ROLL",
-      "DRILL",
-    ]);
   });
 
   it("contains exactly the four agreed presets", () => {

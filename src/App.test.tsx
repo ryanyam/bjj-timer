@@ -186,10 +186,10 @@ describe("the initial selection", () => {
     render(<App />);
 
     expect(clockText()).toBe("5:00");
-    expect(phaseText()).toBe("ROLL");
+    expect(phaseText()).toBe("WORK");
     expect(modeContextText()).toBe("ROLLS");
     expect(roundText()).toBe("ROUND 1");
-    expect(nextText()).toBe("NEXT: ROLL 5:00");
+    expect(nextText()).toBe("NEXT: WORK 5:00");
     expect(mainLabelText()).toBe("Start");
     expect(pausedBadge()).toBeNull();
     expect(mainElement().getAttribute("data-mode")).toBe("rolls");
@@ -248,9 +248,9 @@ describe("choosing a mode or preset while ready", () => {
     selectMode("DRILLS");
 
     expect(clockText()).toBe("2:00");
-    expect(phaseText()).toBe("DRILL");
+    expect(phaseText()).toBe("WORK");
     expect(modeContextText()).toBe("DRILLS");
-    expect(nextText()).toBe("NEXT: DRILL 2:00");
+    expect(nextText()).toBe("NEXT: WORK 2:00");
     expect(presetLabels()).toEqual(["WORK 2:00 / REST 0:30", "1:00 / 0:30"]);
     expect(modeOption("DRILLS").getAttribute("aria-pressed")).toBe("true");
     expect(modeOption("ROLLS").getAttribute("aria-pressed")).toBe("false");
@@ -373,7 +373,7 @@ describe("running a work/rest session", () => {
 
     expect(mainLabelText()).toBe("Pause");
     expect(clockText()).toBe("5:00");
-    expect(phaseText()).toBe("ROLL");
+    expect(phaseText()).toBe("WORK");
     expect(roundText()).toBe("ROUND 1");
     expect(nextText()).toBe("NEXT: REST 1:00");
     expect(mainElement().getAttribute("data-status")).toBe("running");
@@ -391,7 +391,7 @@ describe("running a work/rest session", () => {
     expect(phaseText()).toBe("REST");
     expect(clockText()).toBe("1:00");
     expect(roundText()).toBe("ROUND 1");
-    expect(nextText()).toBe("NEXT: ROLL 5:00");
+    expect(nextText()).toBe("NEXT: WORK 5:00");
     expect(mainElement().getAttribute("data-phase")).toBe("rest");
     expect(restCue).toHaveBeenCalledTimes(1);
     expect(workCue).not.toHaveBeenCalled();
@@ -405,7 +405,7 @@ describe("running a work/rest session", () => {
 
     advance(1 * MINUTE);
 
-    expect(phaseText()).toBe("ROLL");
+    expect(phaseText()).toBe("WORK");
     expect(clockText()).toBe("5:00");
     expect(roundText()).toBe("ROUND 2");
     expect(nextText()).toBe("NEXT: REST 1:00");
@@ -426,7 +426,7 @@ describe("running a work/rest session", () => {
 
     expect(phaseText()).toBe("REST");
     expect(clockText()).toBe("0:30");
-    expect(nextText()).toBe("NEXT: DRILL 1:00");
+    expect(nextText()).toBe("NEXT: WORK 1:00");
   });
 
   it("does not fire a second cue from a delayed, repeated render", () => {
@@ -451,7 +451,7 @@ describe("running a work/rest session", () => {
       vi.advanceTimersToNextTimer();
     });
 
-    expect(phaseText()).toBe("ROLL");
+    expect(phaseText()).toBe("WORK");
     expect(roundText()).toBe("ROUND 2");
     expect(workCue).toHaveBeenCalledTimes(1);
     expect(restCue).not.toHaveBeenCalled();
@@ -487,7 +487,7 @@ describe("pause, resume and reset", () => {
     expect(mainLabelText()).toBe("Resume");
     expect(pausedBadge()).not.toBeNull();
     expect(clockText()).toBe("3:00");
-    expect(phaseText()).toBe("ROLL");
+    expect(phaseText()).toBe("WORK");
     expect(mainElement().getAttribute("data-status")).toBe("paused");
 
     advance(10 * MINUTE);
@@ -522,7 +522,7 @@ describe("pause, resume and reset", () => {
     expect(clockText()).toBe("0:30");
 
     advance(30 * SECOND);
-    expect(phaseText()).toBe("ROLL");
+    expect(phaseText()).toBe("WORK");
     expect(roundText()).toBe("ROUND 2");
     expect(clockText()).toBe("5:00");
   });
@@ -539,10 +539,10 @@ describe("pause, resume and reset", () => {
 
     expect(mainLabelText()).toBe("Start");
     expect(clockText()).toBe("1:00");
-    expect(phaseText()).toBe("DRILL");
+    expect(phaseText()).toBe("WORK");
     expect(modeContextText()).toBe("DRILLS");
     expect(roundText()).toBe("ROUND 1");
-    expect(nextText()).toBe("NEXT: DRILL 1:00");
+    expect(nextText()).toBe("NEXT: WORK 1:00");
     expect(pausedBadge()).toBeNull();
     expect(mainElement().getAttribute("data-status")).toBe("ready");
     expect(workCue).not.toHaveBeenCalled();
@@ -556,7 +556,7 @@ describe("pause, resume and reset", () => {
 
     pressMainLong();
 
-    expect(phaseText()).toBe("ROLL");
+    expect(phaseText()).toBe("WORK");
     expect(clockText()).toBe("5:00");
     expect(roundText()).toBe("ROUND 1");
   });
@@ -618,7 +618,7 @@ describe("selection while running or paused", () => {
 
     expect(modeContextText()).toBe("ROLLS");
     expect(clockText()).toBe("4:00");
-    expect(phaseText()).toBe("ROLL");
+    expect(phaseText()).toBe("WORK");
   });
 
   it("refuses changes while paused", () => {

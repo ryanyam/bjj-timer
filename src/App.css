@@ -813,3 +813,134 @@
 .meta-item--round {
   font-size: max(2.1rem, 3.3vh);
 }
+
+/* Get Ready uses the neutral charcoal band, not the Work gold. */
+.phase-band--getReady {
+  background: var(--charcoal);
+  color: var(--paper);
+}
+
+/* Non-public settings panel, reachable only via #settings. */
+.settings-panel {
+  position: fixed;
+  right: var(--safe-x);
+  bottom: var(--safe-x);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 18rem;
+  padding: 1rem;
+  background: var(--paper);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  font-family: var(--font-sans);
+}
+
+.settings-panel__title,
+.settings-panel__intro {
+  margin: 0;
+}
+
+.settings-panel__title {
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.settings-panel__intro {
+  color: var(--charcoal);
+  font-size: 0.9rem;
+}
+
+.settings-panel__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-weight: 600;
+}
+
+.settings-panel select {
+  min-height: 2.25rem;
+  padding: 0.25rem 0.5rem;
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+/* Keep the full interface usable in smaller landscape windows without changing
+   the 1080p/4K composition. */
+@media (max-height: 800px) {
+  .app-header {
+    padding: 0.45rem var(--safe-x);
+  }
+
+  .app-header__logo {
+    width: min(44vw, 18rem);
+  }
+
+  .app-clock {
+    font-size: 1.4rem;
+  }
+
+  .app-main__stage {
+    gap: 0.4rem;
+  }
+
+  .phase-band {
+    min-height: 3.75rem;
+  }
+
+  .phase-band__label {
+    font-size: 2.3rem;
+  }
+
+  .app-countdown {
+    font-size: max(8rem, 30vh);
+  }
+
+  .timer-card {
+    padding: 0.35rem 0;
+  }
+
+  .selector-chip {
+    font-size: 0.8rem;
+  }
+
+  .timer-card__meta {
+    font-size: 1rem;
+  }
+
+  .meta-item--round {
+    font-size: 1.35rem;
+  }
+
+  .app-footer {
+    padding: 0.45rem var(--safe-x);
+  }
+
+  .control-button {
+    height: max(3.75rem, 9vh);
+    padding: 0.35rem 0.75rem;
+  }
+
+  .control-button__content {
+    gap: 0.5rem;
+  }
+
+  .control-button__icon {
+    width: 2rem;
+    height: 2rem;
+    flex-basis: 2rem;
+  }
+
+  .control-button__label {
+    font-size: 1.5rem;
+  }
+
+  .control-button__hint {
+    font-size: 0.65rem;
+  }
+}

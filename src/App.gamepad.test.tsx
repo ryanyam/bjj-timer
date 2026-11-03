@@ -8,9 +8,11 @@ vi.mock("./audio", () => ({
   playWorkStart: vi.fn(),
   playRestStart: vi.fn(),
   playModeChange: vi.fn(),
+  scheduleGetReadyCues: vi.fn(() => vi.fn()),
 }));
 
 import { playWorkStart } from "./audio";
+import { resetGetReadySettings, setGetReadySecondsForMode } from "./settings";
 
 /**
  * App-level checks for the Gamepad API path with the Rolls/Drills session.
@@ -173,6 +175,9 @@ beforeEach(() => {
 
   pads = [];
   scheduledFrame = null;
+  resetGetReadySettings();
+  setGetReadySecondsForMode("rolls", 0);
+  setGetReadySecondsForMode("drills", 0);
 
   Object.defineProperty(document, "visibilityState", {
     configurable: true,

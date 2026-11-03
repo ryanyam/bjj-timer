@@ -37,10 +37,13 @@ import {
   playModeChange,
   playRestStart,
   playWorkStart,
+  scheduleGetReadyCues,
   unlockAudio,
 } from "./audio";
 import { useGamepadInput } from "./useGamepadInput";
 import { MAIN_BUTTON_HOLD_MS, MODE_BUTTON_HOLD_MS } from "./gamepad";
+import { getReadyMsByMode } from "./settings";
+import { SettingsPanel } from "./SettingsPanel";
 import "./App.css";
 
 /**
@@ -202,7 +205,12 @@ function App() {
     unlockAudio();
     const reading = Date.now();
     setNow(reading);
-    dispatch({ type: "mainShort", now: reading, fromState });
+    dispatch({
+      type: "mainShort",
+      now: reading,
+      fromState,
+      getReadyMsByMode: getReadyMsByMode(),
+    });
   };
 
   /** Full-session reset, shared by a hold on either input. */
@@ -295,7 +303,10 @@ function App() {
         : null;
 
   useEffect(() => {
-    if (state.status !== "running" || state.deadline === null) {
+    if (
+      (state.status !== "running" && state.status !== "getReady") ||
+      state.deadline === null
+    ) {
       return;
     }
 
@@ -320,8 +331,12 @@ function App() {
    * once, so no burst of obsolete cues is played.
    */
   const previousTransitionSeq = useRef(state.transitionSeq);
+  const previousStatus = useRef(state.status);
 
   useEffect(() => {
+    const wasGetReady = previousStatus.current === "getReady";
+    previousStatus.current = state.status;
+
     if (state.transitionSeq === previousTransitionSeq.current) {
       return;
     }
@@ -334,10 +349,45 @@ function App() {
 
     if (state.lastTransition === "rest") {
       playRestStart();
-    } else if (state.lastTransition === "work") {
+    } else if (state.lastTransition === "work" && !wasGetReady) {
       playWorkStart();
     }
   }, [state.transitionSeq, state.status, state.lastTransition]);
+
+  /*
+   * Get Ready ticks/bell are scheduled against the AudioContext clock. On a
+   * natural zero transition the scheduled bell is allowed to play; on cancel
+   * or reset the pending cues are stopped.
+   */
+  const getReadyCancel = useRef<(() => void) | null>(null);
+  const previousAudioStatus = useRef(state.status);
+
+  useEffect(() => {
+    const wasGetReady = previousAudioStatus.current === "getReady";
+    previousAudioStatus.current = state.status;
+
+    if (state.status === "getReady" && state.deadline !== null) {
+      const seconds = Math.max(
+        0,
+        Math.ceil((state.deadline - Date.now()) / 1_000),
+      );
+
+      getReadyCancel.current = scheduleGetReadyCues(seconds);
+      return;
+    }
+
+    if (wasGetReady && state.status === "ready") {
+      getReadyCancel.current?.();
+      getReadyCancel.current = null;
+    }
+  }, [state.status, state.deadline]);
+
+  useEffect(() => {
+    return () => {
+      getReadyCancel.current?.();
+      getReadyCancel.current = null;
+    };
+  }, []);
 
   /*
    * A mode change gets a single short confirmation: one beep and a one-second
@@ -421,6 +471,8 @@ function App() {
       modePress.cancel();
       clearPointerHoldTimer();
       clearModeHoldTimer();
+      getReadyCancel.current?.();
+      getReadyCancel.current = null;
     };
   }, [
     mainPress,
@@ -673,6 +725,8 @@ function App() {
             </span>
           </button>
         </div>
+
+        <SettingsPanel />
 
         <div className="app-footer__status">
           {controllerError !== null ? (

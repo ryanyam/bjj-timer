@@ -30,31 +30,38 @@ export function controlCopy(
   options: ControlCopyOptions = {},
 ): ControlCopy {
   const ready = state.status === "ready";
+  const getReady = state.status === "getReady";
   const running = state.status === "running";
   const holding = options.holding === true;
   const resetFlash = options.resetFlash === true;
 
   const primaryLabel = resetFlash
     ? "RESET"
-    : mainLabel(state).toUpperCase();
+    : getReady
+      ? "STARTING..."
+      : mainLabel(state).toUpperCase();
 
   const primaryHint = resetFlash
     ? "Session reset"
     : holding
       ? "Keep holding..."
-      : ready
-        ? "Press to begin"
-        : running
-          ? "Press to pause"
-          : `Hold ${holdSeconds()} to reset`;
+      : getReady
+        ? "Press to stop the countdown"
+        : ready
+          ? "Press to begin"
+          : running
+            ? "Press to pause"
+            : `Hold ${holdSeconds()} to reset`;
 
   const secondaryLabel = ready ? "PRESET" : "LOCKED";
 
   const secondaryHint = ready
     ? "Press: next preset · Hold: switch mode"
-    : running
-      ? "Pause and reset to change"
-      : "Hold left button to reset";
+    : getReady
+      ? "Wait for the round to start"
+      : running
+        ? "Pause and reset to change"
+        : "Hold left button to reset";
 
   return {
     primaryLabel,

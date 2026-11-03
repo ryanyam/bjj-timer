@@ -20,7 +20,7 @@ import {
   type TrainingMode,
 } from "./training";
 
-export type TimerStatus = "ready" | "running" | "paused";
+export type TimerStatus = "ready" | "getReady" | "running" | "paused";
 export type CyclePhase = "work" | "rest";
 
 export interface RoundState {
@@ -60,7 +60,13 @@ export type RoundAction =
    * time. If the session has moved on by the time the action is reduced, the
    * action is ignored rather than reinterpreted.
    */
-  | { type: "mainShort"; now: number; fromState?: string }
+  | {
+      type: "mainShort";
+      now: number;
+      fromState?: string;
+      /** Per-mode Get Ready durations in ms; omitted means zero. */
+      getReadyMsByMode?: readonly number[];
+    }
   /** Main long press: full-session reset, retaining mode and preset. */
   | { type: "mainLong"; now: number }
   /** White short press: next preset within the current mode. */
@@ -125,6 +131,8 @@ export function mainLabel(state: RoundState): string {
   switch (state.status) {
     case "ready":
       return "Start";
+    case "getReady":
+      return "Starting...";
     case "running":
       return "Pause";
     case "paused":
@@ -143,6 +151,10 @@ export function phaseHeadline(state: RoundState): string {
     return "READY";
   }
 
+  if (state.status === "getReady") {
+    return "GET READY";
+  }
+
   if (state.status === "paused") {
     return "PAUSED";
   }
@@ -155,12 +167,16 @@ export function inFinalTen(state: RoundState, now: number): boolean {
   return state.status === "running" && displayMs(state, now) <= 10 * 1_000;
 }
 
-export type StatusTone = "ready" | "work" | "rest" | "paused";
+export type StatusTone = "ready" | "getReady" | "work" | "rest" | "paused";
 
 /** The visual/status tone for the phase badge, always paired with text. */
 export function statusTone(state: RoundState): StatusTone {
   if (state.status === "ready") {
     return "ready";
+  }
+
+  if (state.status === "getReady") {
+    return "getReady";
   }
 
   if (state.status === "paused") {
@@ -192,7 +208,11 @@ export interface PhasePreview {
 }
 
 export function nextPhase(state: RoundState): PhasePreview {
-  if (state.status === "ready" || state.phase === "rest") {
+  if (
+    state.status === "ready" ||
+    state.status === "getReady" ||
+    state.phase === "rest"
+  ) {
     return { label: "WORK", ms: currentWorkMs(state) };
   }
 
@@ -221,7 +241,7 @@ export function displayMs(state: RoundState, now: number): number {
  * progress on the primary button.
  */
 export function phaseProgress(state: RoundState, now: number): number {
-  if (state.status === "ready") {
+  if (state.status === "ready" || state.status === "getReady") {
     return 0;
   }
 
@@ -238,7 +258,12 @@ export function phaseProgress(state: RoundState, now: number): number {
 export function reduce(state: RoundState, action: RoundAction): RoundState {
   switch (action.type) {
     case "mainShort":
-      return onMainShort(state, action.now, action.fromState);
+      return onMainShort(
+        state,
+        action.now,
+        action.fromState,
+        action.getReadyMsByMode,
+      );
 
     case "mainLong":
       return resetSession(state);
@@ -278,6 +303,7 @@ function onMainShort(
   state: RoundState,
   now: number,
   fromState?: string,
+  getReadyMsByMode?: readonly number[],
 ): RoundState {
   // A tracked press that began in another session state is stale: the timer
   // changed underneath it, so it must not be reinterpreted for the new state.
@@ -286,7 +312,24 @@ function onMainShort(
   }
 
   switch (state.status) {
-    case "ready":
+    case "ready": {
+      const getReadyMs = Math.max(
+        0,
+        getReadyMsByMode?.[state.modeIndex] ?? 0,
+      );
+
+      if (getReadyMs > 0) {
+        return {
+          ...state,
+          status: "getReady",
+          phase: "work",
+          round: 1,
+          deadline: now + getReadyMs,
+          pausedAt: null,
+          lastTransition: null,
+        };
+      }
+
       return {
         ...state,
         status: "running",
@@ -297,6 +340,10 @@ function onMainShort(
         transitionSeq: state.transitionSeq + 1,
         lastTransition: "work",
       };
+    }
+
+    case "getReady":
+      return resetSession(state);
 
     case "running":
       // Freeze the current phase by remembering WHEN we paused.
@@ -408,6 +455,25 @@ function blockedSelection(state: RoundState): RoundState {
 }
 
 function onTick(state: RoundState, now: number): RoundState {
+  if (state.status === "getReady") {
+    if (state.deadline === null || now < state.deadline) {
+      return state;
+    }
+
+    const workDeadline = state.deadline + currentWorkMs(state);
+    const running: RoundState = {
+      ...state,
+      status: "running",
+      phase: "work",
+      deadline: workDeadline,
+      pausedAt: null,
+      transitionSeq: state.transitionSeq + 1,
+      lastTransition: "work",
+    };
+
+    return now >= workDeadline ? onTick(running, now) : running;
+  }
+
   if (state.status !== "running" || state.deadline === null) {
     return state;
   }

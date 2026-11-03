@@ -9,9 +9,16 @@ vi.mock("./audio", () => ({
   playWorkStart: vi.fn(),
   playRestStart: vi.fn(),
   playModeChange: vi.fn(),
+  scheduleGetReadyCues: vi.fn(() => vi.fn()),
 }));
 
-import { playModeChange, playRestStart, playWorkStart } from "./audio";
+import {
+  playModeChange,
+  playRestStart,
+  playWorkStart,
+  scheduleGetReadyCues,
+} from "./audio";
+import { resetGetReadySettings, setGetReadySecondsForMode } from "./settings";
 
 /**
  * Spec for the Rolls/Drills interface in src/App.tsx.
@@ -33,6 +40,7 @@ const MINUTE = 60 * SECOND;
 
 const workCue = vi.mocked(playWorkStart);
 const restCue = vi.mocked(playRestStart);
+const getReadyCue = vi.mocked(scheduleGetReadyCues);
 
 function clockText(): string {
   return screen.getByRole("timer").textContent?.trim() ?? "";
@@ -59,6 +67,10 @@ function phaseText(): string {
   return document.querySelector(".app")?.getAttribute("data-phase") === "rest"
     ? "REST"
     : "WORK";
+}
+
+function phaseHeadlineText(): string {
+  return document.querySelector(".phase-band__label")?.textContent?.trim() ?? "";
 }
 
 function modeContextText(): string {
@@ -192,10 +204,114 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(START);
   vi.clearAllMocks();
+  resetGetReadySettings();
+  setGetReadySecondsForMode("rolls", 0);
+  setGetReadySecondsForMode("drills", 0);
+  getReadyCue.mockReturnValue(vi.fn());
 });
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("Get Ready countdown", () => {
+  it("runs 5 seconds for Rolls and starts work at zero", () => {
+    setGetReadySecondsForMode("rolls", 5);
+    render(<App />);
+
+    pressMainShort();
+
+    expect(document.querySelector(".app")?.getAttribute("data-status")).toBe(
+      "getReady",
+    );
+    expect(phaseHeadlineText()).toBe("GET READY");
+    expect(clockText()).toBe("0:05");
+    expect(mainButton().textContent).toContain("STARTING...");
+    expect(mainButton().textContent).toContain(
+      "Press to stop the countdown",
+    );
+    expect(modeButton().textContent).toContain("LOCKED");
+    expect(modeButton().textContent).toContain("Wait for the round to start");
+    expect(modeButton().hasAttribute("disabled")).toBe(true);
+    expect(roundText()).toBe("ROUND 1");
+    expect(getReadyCue).toHaveBeenCalledWith(5);
+
+    advance(5 * SECOND);
+
+    expect(document.querySelector(".app")?.getAttribute("data-status")).toBe(
+      "running",
+    );
+    expect(phaseText()).toBe("WORK");
+    expect(mainLabelText()).toBe("Pause");
+    expect(clockText()).toBe("5:00");
+    expect(workCue).not.toHaveBeenCalled();
+  });
+
+  it("runs 3 seconds for Drills", () => {
+    setGetReadySecondsForMode("drills", 3);
+    render(<App />);
+    selectMode("DRILLS");
+
+    pressMainShort();
+
+    expect(clockText()).toBe("0:03");
+    expect(modeButton().textContent).toContain(
+      "Wait for the round to start",
+    );
+
+    advance(3 * SECOND);
+
+    expect(phaseText()).toBe("WORK");
+    expect(clockText()).toBe("2:00");
+  });
+
+  it("cancels back to Ready without starting work", () => {
+    setGetReadySecondsForMode("rolls", 5);
+    const cancel = vi.fn();
+    getReadyCue.mockReturnValue(cancel);
+    render(<App />);
+
+    pressMainShort();
+    pressMainShort();
+
+    expect(document.querySelector(".app")?.getAttribute("data-status")).toBe(
+      "ready",
+    );
+    expect(phaseHeadlineText()).toBe("READY");
+    expect(clockText()).toBe("5:00");
+    expect(cancel).toHaveBeenCalled();
+    expect(workCue).not.toHaveBeenCalled();
+  });
+
+  it("returns to Ready on a full reset", () => {
+    setGetReadySecondsForMode("rolls", 5);
+    const cancel = vi.fn();
+    getReadyCue.mockReturnValue(cancel);
+    render(<App />);
+
+    pressMainShort();
+    pressMainLong();
+
+    expect(document.querySelector(".app")?.getAttribute("data-status")).toBe(
+      "ready",
+    );
+    expect(clockText()).toBe("5:00");
+    expect(cancel).toHaveBeenCalled();
+  });
+
+  it("starts immediately when the configured duration is zero", () => {
+    setGetReadySecondsForMode("drills", 0);
+    render(<App />);
+    selectMode("DRILLS");
+
+    pressMainShort();
+
+    expect(document.querySelector(".app")?.getAttribute("data-status")).toBe(
+      "running",
+    );
+    expect(clockText()).toBe("2:00");
+    expect(getReadyCue).not.toHaveBeenCalled();
+  });
 });
 
 describe("the initial selection", () => {

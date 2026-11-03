@@ -54,7 +54,7 @@ function scheduleTone(
   frequency: number,
   startOffset: number,
   duration: number,
-): void {
+): OscillatorNode {
   const oscillator = audio.createOscillator();
   const gain = audio.createGain();
   const start = audio.currentTime + startOffset;
@@ -71,6 +71,8 @@ function scheduleTone(
   gain.connect(audio.destination);
   oscillator.start(start);
   oscillator.stop(start + duration + 0.02);
+
+  return oscillator;
 }
 
 function play(cues: readonly (readonly [number, number, number])[]): void {
@@ -112,4 +114,59 @@ export function playRestStart(): void {
 /** One short confirmation beep: the main mode has changed. */
 export function playModeChange(): void {
   play([[660, 0, 0.11]]);
+}
+
+/**
+ * Get Ready ticks on each of the final three seconds and the existing start
+ * cue at zero, all scheduled against the AudioContext clock. The returned
+ * function cancels pending ticks/bell when the countdown is abandoned.
+ */
+export function scheduleGetReadyCues(seconds: number): () => void {
+  const audio = getContext();
+
+  if (audio === null || seconds <= 0) {
+    return () => {};
+  }
+
+  let cancelled = false;
+  const oscillators: OscillatorNode[] = [];
+
+  const schedule = () => {
+    if (cancelled) {
+      return;
+    }
+
+    for (const offset of [seconds - 3, seconds - 2, seconds - 1]) {
+      if (offset >= 0) {
+        oscillators.push(scheduleTone(audio, 660, offset, 0.07));
+      }
+    }
+
+    // Use the existing work-start cue as the bell at zero.
+    oscillators.push(scheduleTone(audio, 880, seconds, 0.09));
+    oscillators.push(scheduleTone(audio, 880, seconds + 0.14, 0.09));
+  };
+
+  if (audio.state === "suspended") {
+    void audio
+      .resume()
+      .then(schedule)
+      .catch(() => {});
+  } else {
+    schedule();
+  }
+
+  return () => {
+    cancelled = true;
+
+    for (const oscillator of oscillators) {
+      try {
+        oscillator.stop();
+      } catch {
+        // Already stopped.
+      }
+    }
+
+    oscillators.length = 0;
+  };
 }

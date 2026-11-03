@@ -41,5 +41,7 @@
   /* Type */
   --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
+  --option-size: max(1.75rem, 2.8vh);
+  --row-label-size: max(1.5rem, 2.6vh);
   --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
 }

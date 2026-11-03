@@ -575,7 +575,7 @@ function App() {
                   </div>
 
                   <div className="selector-group">
-                    <span className="selector-label">PRESET · WORK / REST</span>
+                    <span className="selector-label">PRESET</span>
                     <div
                       className="selector-row"
                       role="group"
@@ -739,26 +739,20 @@ function App() {
 
         <SettingsPanel />
 
-        <div className="app-footer__status">
-          {soundUnavailable && (
-            <p className="sound-warning" role="status">
-              Sound unavailable
-            </p>
-          )}
-          {controllerError !== null ? (
-            <p className="controller-status controller-status--error">
-              {controllerError}
-            </p>
-          ) : canSelect ? (
-            <p
-              key={`${state.modeIndex}-${presetIndex}`}
-              className="idle-hint"
-              aria-hidden="true"
-            >
-              Hold for mode
-            </p>
-          ) : null}
-        </div>
+        {(soundUnavailable || controllerError !== null) && (
+          <div className="app-footer__status">
+            {soundUnavailable && (
+              <p className="sound-warning" role="status">
+                Sound unavailable
+              </p>
+            )}
+            {controllerError !== null && (
+              <p className="controller-status controller-status--error">
+                {controllerError}
+              </p>
+            )}
+          </div>
+        )}
       </footer>
     </div>
   );

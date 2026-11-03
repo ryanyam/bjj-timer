@@ -77,9 +77,13 @@ function App() {
   const preview = nextPhase(state);
   const canSelect = selectionAllowed(state);
   const headline = phaseHeadline(state);
-  const warning =
+  const warningPhase =
     (state.status === "running" || state.status === "paused") &&
-    displayMs(state, now) <= 10_000;
+    displayMs(state, now) <= 10_000
+      ? state.phase
+      : null;
+  const showGetReady =
+    warningPhase === "rest" && state.status === "running";
   const tone = statusTone(state);
 
   /*
@@ -527,7 +531,7 @@ function App() {
                 : headline}
             </span>
             <span className="status-strip__side status-strip__side--right meta-item">
-              {`NEXT: ${preview.label} ${formatRemaining(preview.ms)}`}
+              {`${showGetReady ? "GET READY" : "NEXT"}: ${preview.label} ${formatRemaining(preview.ms)}`}
             </span>
           </div>
 
@@ -535,7 +539,7 @@ function App() {
             {formatRemaining(displayMs(state, now))}
           </div>
 
-          <PhaseProgressBar state={state} warning={warning} />
+          <PhaseProgressBar state={state} warning={warningPhase} />
 
           <section
             className="timer-card"

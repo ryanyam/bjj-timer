@@ -124,11 +124,25 @@ function pausedBadge(): HTMLElement | null {
   return document.querySelector(".status-badge--paused");
 }
 
-function progressWarning(): boolean {
+function progressTone(): "work" | "rest" | null {
+  const bar = document.querySelector(".progress-bar");
+
+  if (bar?.classList.contains("progress-bar--warning-rest")) {
+    return "rest";
+  }
+
+  if (bar?.classList.contains("progress-bar--warning-work")) {
+    return "work";
+  }
+
+  return null;
+}
+
+function nextLabelText(): string {
   return (
     document
-      .querySelector(".progress-bar")
-      ?.classList.contains("progress-bar--warning") ?? false
+      .querySelector(".status-strip__side--right")
+      ?.textContent?.trim() ?? ""
   );
 }
 
@@ -601,7 +615,8 @@ describe("the Mode button and keyboard selection", () => {
     advance(30 * SECOND);
     expect(phaseText()).toBe("REST");
     expect(clockText()).toBe("0:05");
-    expect(nextText()).toBe("NEXT: WORK 0:30");
+    expect(nextLabelText()).toBe("GET READY: WORK 0:30");
+    expect(progressTone()).toBe("rest");
   });
 
   it("switches mode at 800 ms, not earlier, and release does nothing extra", () => {
@@ -767,39 +782,86 @@ describe("running a work/rest session", () => {
 });
 
 describe("final-seconds warning", () => {
-  it("starts at ten displayed seconds, stays static when paused, and clears on the next phase", () => {
+  it("uses red for WORK ending and amber for REST ending without stale colors", () => {
     render(<App />);
     selectMode("KIDS");
     pressMainShort();
 
     advance(19 * SECOND);
     expect(clockText()).toBe("0:11");
-    expect(progressWarning()).toBe(false);
+    expect(progressTone()).toBeNull();
+    expect(nextText()).toBe("NEXT: REST 0:05");
     expect(statusBandClass()).toContain("status-strip--work");
 
     advance(SECOND);
     expect(clockText()).toBe("0:10");
-    expect(progressWarning()).toBe(true);
+    expect(progressTone()).toBe("work");
     expect(statusBandClass()).not.toContain("status-strip--urgent");
 
     pressMainShort();
     expect(pausedBadge()).not.toBeNull();
-    expect(progressWarning()).toBe(true);
+    expect(progressTone()).toBe("work");
+    expect(nextText()).toBe("NEXT: REST 0:05");
 
     advance(5 * SECOND);
     expect(clockText()).toBe("0:10");
-    expect(progressWarning()).toBe(true);
+    expect(progressTone()).toBe("work");
 
     pressMainShort();
     advance(10 * SECOND);
     expect(phaseText()).toBe("REST");
     expect(clockText()).toBe("0:05");
-    expect(progressWarning()).toBe(true);
+    expect(progressTone()).toBe("rest");
+    expect(nextLabelText()).toBe("GET READY: WORK 0:30");
 
     advance(5 * SECOND);
     expect(phaseText()).toBe("WORK");
     expect(clockText()).toBe("0:30");
-    expect(progressWarning()).toBe(false);
+    expect(progressTone()).toBeNull();
+    expect(nextText()).toBe("NEXT: REST 0:05");
+  });
+
+  it("keeps amber and freezes it when paused during REST ending", () => {
+    render(<App />);
+    selectMode("KIDS");
+    pressMainShort();
+    advance(30 * SECOND);
+
+    expect(phaseText()).toBe("REST");
+    expect(clockText()).toBe("0:05");
+    expect(progressTone()).toBe("rest");
+    expect(nextLabelText()).toBe("GET READY: WORK 0:30");
+
+    pressMainShort();
+    advance(2 * SECOND);
+    expect(clockText()).toBe("0:05");
+    expect(progressTone()).toBe("rest");
+    expect(nextText()).toBe("NEXT: WORK 0:30");
+    expect(statusBandClass()).toContain("status-strip--paused");
+
+    pressMainShort();
+    expect(progressTone()).toBe("rest");
+    expect(nextLabelText()).toBe("GET READY: WORK 0:30");
+  });
+
+  it("keeps normal REST neutral until its final ten seconds", () => {
+    render(<App />);
+    pressMainShort();
+    advance(5 * MINUTE);
+
+    expect(phaseText()).toBe("REST");
+    expect(progressTone()).toBeNull();
+    expect(nextText()).toBe("NEXT: WORK 5:00");
+
+    advance(50 * SECOND);
+    expect(clockText()).toBe("0:10");
+    expect(progressTone()).toBe("rest");
+    expect(nextLabelText()).toBe("GET READY: WORK 5:00");
+
+    advance(10 * SECOND);
+    expect(phaseText()).toBe("WORK");
+    expect(progressTone()).toBeNull();
+    expect(nextText()).toBe("NEXT: REST 1:00");
   });
 
   it("clears the warning on reset", () => {
@@ -807,12 +869,12 @@ describe("final-seconds warning", () => {
     selectMode("KIDS");
     pressMainShort();
     advance(20 * SECOND);
-    expect(progressWarning()).toBe(true);
+    expect(progressTone()).toBe("work");
 
     pressMainLong();
 
     expect(clockText()).toBe("0:30");
-    expect(progressWarning()).toBe(false);
+    expect(progressTone()).toBeNull();
     expect(statusBandClass()).toContain("status-strip--ready");
   });
 });

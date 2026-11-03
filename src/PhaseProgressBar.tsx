@@ -17,10 +17,10 @@ import {
  */
 export function PhaseProgressBar({
   state,
-  warning = false,
+  warning = null,
 }: {
   state: RoundState;
-  warning?: boolean;
+  warning?: "work" | "rest" | null;
 }) {
   const fillRef = useRef<HTMLSpanElement>(null);
 
@@ -83,7 +83,7 @@ export function PhaseProgressBar({
 
   return (
     <div
-      className={`progress-bar${warning ? " progress-bar--warning" : ""}`}
+      className={`progress-bar${warning ? ` progress-bar--warning-${warning}` : ""}`}
       aria-hidden="true"
     >
       <span ref={fillRef} className="progress-bar__fill" />

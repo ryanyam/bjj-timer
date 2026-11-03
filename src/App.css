@@ -1060,8 +1060,10 @@
 /* Keep the phase bar restrained and visually separate from the hold fill. */
 .progress-bar { height: max(0.5rem, 1vh); }
 .progress-bar__fill { background: var(--progress-fill); }
-.progress-bar--warning { background: var(--warning-track); }
-.progress-bar--warning .progress-bar__fill { background: var(--red); }
+.progress-bar--warning-work { background: var(--warning-track); }
+.progress-bar--warning-work .progress-bar__fill { background: var(--red); }
+.progress-bar--warning-rest { background: var(--rest-warning-track); }
+.progress-bar--warning-rest .progress-bar__fill { background: var(--rest-warning-fill); }
 
 @media (max-width: 700px) {
   .status-strip {

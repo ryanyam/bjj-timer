@@ -7,6 +7,13 @@ The authoritative version is the `version` field in `package.json`.
 
 No unreleased changes recorded.
 
+## [0.1.0-beta.1]
+
+### Changed
+
+- Promoted the application version to beta for the upcoming gym beta-testing
+  release.
+
 ## [0.1.0-alpha.1]
 
 ### Added

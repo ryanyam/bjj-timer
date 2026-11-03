@@ -6,6 +6,7 @@ import {
   type GetReadySeconds,
 } from "./settings";
 import { TRAINING_MODES } from "./training";
+import { VersionBadge } from "./VersionBadge";
 
 type Values = Record<string, GetReadySeconds>;
 
@@ -43,6 +44,7 @@ export function SettingsPanel() {
   return (
     <aside className="settings-panel" aria-label="Timer settings">
       <h2 className="settings-panel__title">Timer settings</h2>
+      <VersionBadge />
       <p className="settings-panel__intro">Get Ready countdown</p>
 
       {TRAINING_MODES.map((mode) => (

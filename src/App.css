@@ -952,3 +952,11 @@
   font-weight: 700;
   line-height: 1.2;
 }
+
+.settings-panel__version {
+  margin: 0;
+  color: var(--charcoal);
+  font-size: clamp(0.75rem, 1.1vh, 0.95rem);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}

@@ -96,3 +96,63 @@ fully built or launched here without a Linux x86-64 environment or Linux Docker.
 Run `npm run desktop:build` on the target Linux x86-64 machine (or a Linux
 container) to produce and test the AppImage. The exact command is above; no
 Linux package or Chromebox run is claimed as tested here.
+
+## Versioning and releases
+
+The authoritative version is the `version` field in `package.json`. The Vite
+build injects it as `__APP_VERSION__`; `src/version.ts` exposes it and the
+non-public `#settings` panel shows `BJJ Timer · v<version>`. There is no second
+hard-coded version string.
+
+### SemVer stages
+
+- `alpha`: functionality is still being implemented or changed.
+- `beta`: intended features work and are being tested in actual gym use.
+- `rc`: release candidate under final verification.
+- `stable`: approved for normal gym operation.
+
+Examples (guidance only; promotion is intentional, never automatic):
+
+```text
+0.1.0-alpha.1 -> 0.1.0-alpha.2 -> 0.1.0-beta.1 -> 1.0.0-rc.1 -> 1.0.0
+```
+
+After `1.0.0`: PATCH for backward-compatible fixes, MINOR for
+backward-compatible features, and MAJOR for incompatible changes to supported
+settings, data formats or integrations.
+
+### Intentionally changing the version
+
+These commands update local package metadata and the lockfile only. They do not
+commit, tag, publish or deploy:
+
+```sh
+npm pkg get version
+npm version 0.1.0-alpha.2 --no-git-tag-version
+npm version 0.1.0-beta.1 --no-git-tag-version
+npm version 1.0.0-rc.1 --no-git-tag-version
+npm version 1.0.0 --no-git-tag-version
+```
+
+`npm version` updates both `package.json` and `package-lock.json`. Update
+`CHANGELOG.md` manually; record only changes verified in the repository and never
+invent release dates or prior releases. Do not bump on every edit, build or
+startup.
+
+Separate actions that create repository/deployment state are not performed by
+the commands above: `git commit`, `git tag`, publishing and deployment all
+remain explicit, deliberate operations.
+
+### Build and verify
+
+```sh
+npm test
+npm run lint
+npm run build
+npm run desktop:build   # optional Linux AppImage
+```
+
+Open the app with `#settings` (for example `http://localhost:5173/#settings`)
+and confirm the `BJJ Timer · v...` line, or check `npm pkg get version`. The
+Electron AppImage artifact name also includes the package version. No Git
+command or optional commit identifier is required for a build.

@@ -31,7 +31,7 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--safe-y) var(--safe-x);
-  padding: max(0.5rem, 1.5vh) var(--safe-x);
+  padding: max(1rem, 2.8vh) var(--safe-x);
   background: var(--paper);
   border-bottom: var(--rule);
 }
@@ -40,7 +40,7 @@
    disappear into the off-white header without altering the mark. */
 .app-header__logo {
   display: block;
-  width: min(55vw, clamp(14rem, 30vw, 60rem));
+  width: min(62vw, max(16rem, 39vw));
   height: auto;
   max-width: 100%;
   flex: 0 1 auto;
@@ -49,46 +49,33 @@
 
 .app-clock {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.1rem;
-  min-width: clamp(9rem, 12vw, 18rem);
-  margin-left: auto;
-  color: var(--charcoal);
-  text-align: right;
-}
-
-.app-clock__date {
-  color: var(--charcoal);
-  font-size: clamp(0.65rem, 1.4vh, 2rem);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  line-height: 1.2;
-  white-space: nowrap;
-  text-transform: uppercase;
-}
-
-.app-clock__time-row {
-  display: flex;
   align-items: baseline;
   justify-content: flex-end;
   gap: 0.3em;
+  margin-left: auto;
   color: var(--charcoal);
-  font-size: clamp(1.1rem, 2vw, 5rem);
+  font-size: max(2.25rem, 3.6vh);
   font-weight: 600;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  text-align: right;
   white-space: nowrap;
+}
+
+.app-clock__date,
+.app-clock__time,
+.app-clock__separator {
+  color: var(--charcoal);
 }
 
 .app-clock__time {
   min-width: 5ch;
   text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 .app-clock__period {
   min-width: 3ch;
-  font-size: 0.55em;
+  font-size: 0.62em;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-align: left;
@@ -118,31 +105,22 @@
 /* Thick phase band, directly above the digits. Text always names the phase. */
 .phase-band {
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 0.08em;
   width: 100%;
-  min-height: clamp(4.5rem, 8.3vh, 18rem);
-  padding: 0.3em 1em;
+  min-height: max(5rem, 8.8vh);
+  padding: 0 1em;
   box-sizing: border-box;
-  border-radius: 2px;
+  border-radius: 0;
   text-align: center;
   text-transform: uppercase;
 }
 
 .phase-band__label {
-  font-size: max(2.5rem, 6.2vh);
+  font-size: max(4.5rem, 7.8vh);
   font-weight: 700;
   letter-spacing: 0.08em;
   line-height: 1;
-}
-
-.phase-band__detail {
-  font-size: clamp(0.75rem, 1.7vh, 2.2rem);
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  line-height: 1.1;
 }
 
 .phase-band--work {
@@ -194,7 +172,7 @@
   color: var(--ink);
   font-size: max(14rem, 37vh);
   font-weight: 800;
-  line-height: 1.12;
+  line-height: 1;
   letter-spacing: -0.02em;
   text-align: center;
   white-space: nowrap;
@@ -202,29 +180,21 @@
 }
 
 .progress-bar {
+  flex: 0 0 auto;
   width: 100%;
-  height: max(16px, 1.85vh);
+  height: max(1.5rem, 2.22vh);
   overflow: hidden;
   background: var(--silver);
 }
 
 .progress-bar__fill {
   display: block;
-  width: 0;
+  width: 100%;
   height: 100%;
-  background: var(--gold);
-}
-
-.progress-bar--rest .progress-bar__fill {
-  background: var(--charcoal);
-}
-
-.progress-bar--paused[data-phase="work"] .progress-bar__fill {
-  background: var(--gold-dim);
-}
-
-.progress-bar--paused[data-phase="rest"] .progress-bar__fill {
-  background: var(--charcoal-dim);
+  background: var(--ink);
+  transform: scaleX(0);
+  transform-origin: left center;
+  will-change: transform;
 }
 
 /* ---------- Grouped info row ---------- */
@@ -701,4 +671,145 @@
   .idle-hint {
     animation: none;
   }
+}
+
+/* ---------- Two-line control alignment and larger type ---------- */
+
+.app-main__stage {
+  justify-content: space-between;
+  gap: max(0.75rem, 2.22vh);
+}
+
+.timer-card {
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: max(0.25rem, 1vh);
+  padding: max(0.5rem, 1.4vh) 0;
+}
+
+.mode-preset-line {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  min-height: max(2.5rem, 4.5vh);
+}
+
+.timer-card__selectors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: max(0.6rem, 1.4vw);
+}
+
+.selector-label {
+  font-size: max(0.8rem, 1.1vh);
+}
+
+.selector-chip {
+  font-size: max(2rem, 3.2vh);
+  padding: 0.2em 0.55em;
+}
+
+.mode-preset-summary {
+  margin: 0;
+  color: var(--ink);
+  font-size: max(2rem, 3.2vh);
+  font-weight: 600;
+}
+
+.timer-card__meta {
+  margin-left: 0;
+  justify-content: flex-start;
+  text-align: left;
+  font-size: max(2rem, 3.2vh);
+}
+
+.meta-item--round {
+  font-size: max(2.25rem, 3.6vh);
+}
+
+.app-footer {
+  padding: max(1rem, 2.2vh) var(--safe-x);
+}
+
+.control-button {
+  height: max(8.5rem, 12.6vh);
+  padding: max(1rem, 2.22vh);
+  justify-content: center;
+}
+
+.control-button__content {
+  justify-content: center;
+  gap: max(1rem, 2.22vh);
+}
+
+.control-button__icon {
+  width: max(3rem, 5.93vh);
+  height: max(3rem, 5.93vh);
+  flex: 0 0 max(3rem, 5.93vh);
+}
+
+.control-button__text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
+  line-height: 1.05;
+}
+
+.control-button__label {
+  font-size: max(2.75rem, 4.8vh);
+  line-height: 1.05;
+}
+
+.control-button__hint {
+  font-size: max(1.5rem, 2.6vh);
+  line-height: 1.2;
+}
+
+.control-button--mode {
+  background: var(--paper);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+}
+
+.control-button--mode .control-button__hint {
+  color: inherit;
+}
+
+.control-button--mode:disabled {
+  background: var(--paper);
+  color: var(--charcoal);
+  border: 1px solid var(--silver);
+  opacity: 1;
+}
+
+.control-button--mode:disabled .control-button__hint {
+  color: var(--charcoal);
+}
+
+/* Compact the two-line information row so it fits between the digits and
+   controls without overlapping the footer at 1080p. */
+.timer-card {
+  padding: max(0.25rem, 0.8vh) 0;
+  gap: max(0.15rem, 0.5vh);
+}
+
+.mode-preset-line {
+  min-height: 0;
+}
+
+.selector-chip {
+  font-size: max(2rem, 3vh);
+  padding: 0.12em 0.45em;
+}
+
+.timer-card__meta {
+  font-size: max(1.9rem, 2.9vh);
+}
+
+.meta-item--round {
+  font-size: max(2.1rem, 3.3vh);
 }

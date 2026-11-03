@@ -5,18 +5,16 @@ export interface ClockParts {
 }
 
 /**
- * Formats the device's local date and a 12-hour time with hour and minutes.
- * `locale` is optional so the app follows the device and tests can pin one.
+ * Formats the device's local short date ("Tue, Nov 3") and 12-hour time with
+ * hour and minutes. `locale` is optional so the app follows the device and
+ * tests can pin one.
  */
 export function formatClock(date: Date, locale?: string): ClockParts {
   const dateText = new Intl.DateTimeFormat(locale, {
     weekday: "short",
     month: "short",
     day: "numeric",
-    year: "numeric",
-  })
-    .format(date)
-    .toUpperCase();
+  }).format(date);
 
   const parts = new Intl.DateTimeFormat(locale, {
     hour: "2-digit",

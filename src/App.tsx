@@ -19,8 +19,6 @@ import {
   mainLabel,
   nextPhase,
   phaseHeadline,
-  phaseLabel,
-  phaseProgress,
   reduce,
   selectionAllowed,
   stateKey,
@@ -31,6 +29,8 @@ import {
   compactPresetLabel,
   fullPresetLabel,
 } from "./training";
+import { controlCopy } from "./controls";
+import { PhaseProgressBar } from "./PhaseProgressBar";
 import { LiveClock } from "./LiveClock";
 import logoUrl from "./assets/alliance-jiu-jitsu-manila.jpg";
 import {
@@ -61,6 +61,7 @@ function App() {
   const [now, setNow] = useState(() => Date.now());
   const [notice, setNotice] = useState<string | null>(null);
   const [modeFlash, setModeFlash] = useState<string | null>(null);
+  const [resetFlash, setResetFlash] = useState(false);
 
   const mode = currentMode(state);
   const preset = currentPreset(state);
@@ -68,7 +69,6 @@ function App() {
   const preview = nextPhase(state);
   const canSelect = selectionAllowed(state);
   const tone = statusTone(state);
-  const phasePercent = phaseProgress(state, now);
   const headline = phaseHeadline(state);
   const urgent = inFinalTen(state, now);
 
@@ -212,6 +212,8 @@ function App() {
     const reading = Date.now();
     setNow(reading);
     dispatch({ type: "mainLong", now: reading });
+
+    setResetFlash(true);
   };
 
   const cyclePreset = () => {
@@ -280,6 +282,11 @@ function App() {
     gamepad.mainHoldProgress,
   );
 
+  const copy = controlCopy(state, {
+    holding: mainHoldProgress > 0 && !resetFlash,
+    resetFlash,
+  });
+
   const controllerError =
     gamepad.status === "disconnected"
       ? "Controller disconnected"
@@ -347,7 +354,7 @@ function App() {
     previousMode.current = mode.id;
     playModeChange();
 
-    const showId = setTimeout(() => setModeFlash(mode.title), 0);
+    const showId = setTimeout(() => setModeFlash(`MODE: ${mode.title}`), 0);
     const hideId = setTimeout(() => setModeFlash(null), 1_000);
 
     return () => {
@@ -355,6 +362,16 @@ function App() {
       clearTimeout(hideId);
     };
   }, [mode]);
+
+  useEffect(() => {
+    if (!resetFlash) {
+      return;
+    }
+
+    const hideId = setTimeout(() => setResetFlash(false), 1_000);
+
+    return () => clearTimeout(hideId);
+  }, [resetFlash]);
 
   /*
    * A blocked selection attempt is recorded by the reducer, then acknowledged
@@ -438,85 +455,85 @@ function App() {
             role="status"
             aria-live="polite"
           >
-            <span className="phase-band__label">{headline}</span>{" "}
-            <span className="phase-band__detail">
-              {headline === phaseLabel(state)
-                ? mode.title
-                : `${phaseLabel(state)} · ${mode.title}`}
-            </span>
+            <span className="phase-band__label">{headline}</span>
           </div>
 
           <div className="app-countdown" role="timer">
             {formatRemaining(displayMs(state, now))}
           </div>
 
-          <div
-            className={`progress-bar progress-bar--${tone}`}
-            data-phase={state.phase}
-            aria-hidden="true"
-          >
-            <span
-              className="progress-bar__fill"
-              style={{ width: `${phasePercent * 100}%` }}
-            />
-          </div>
+          <PhaseProgressBar state={state} />
 
           <section
             className="timer-card"
             aria-label="Mode, preset and round details"
           >
-            <div className="timer-card__selectors">
-              <div className="selector-group">
-                <span className="selector-label">MODE</span>
-                <div
-                  className="selector-row"
-                  role="group"
-                  aria-label="Main mode"
-                >
-                  {TRAINING_MODES.map((option, index) => {
-                    const selected = index === state.modeIndex;
+            <div className="mode-preset-line">
+              {canSelect ? (
+                <div className="timer-card__selectors">
+                  <div className="selector-group">
+                    <span className="selector-label">MODE</span>
+                    <div
+                      className="selector-row"
+                      role="group"
+                      aria-label="Main mode"
+                    >
+                      {TRAINING_MODES.map((option, index) => {
+                        const selected = index === state.modeIndex;
 
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        className="selector-chip selector-chip--mode"
-                        data-selected={selected ? "true" : undefined}
-                        aria-pressed={selected}
-                        aria-disabled={canSelect ? undefined : true}
-                        onClick={() => chooseMode(index)}
-                      >
-                        {option.title}
-                      </button>
-                    );
-                  })}
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            className="selector-chip selector-chip--mode"
+                            data-selected={selected ? "true" : undefined}
+                            aria-pressed={selected}
+                            onClick={() => chooseMode(index)}
+                          >
+                            {option.title}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="selector-group">
+                    <span className="selector-label">PRESET</span>
+                    <div
+                      className="selector-row"
+                      role="group"
+                      aria-label="Preset"
+                    >
+                      {mode.presets.map((option, index) => {
+                        const selected = index === presetIndex;
+
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            className="selector-chip selector-chip--preset"
+                            data-selected={selected ? "true" : undefined}
+                            aria-pressed={selected}
+                            onClick={() => choosePreset(index)}
+                          >
+                            {selected
+                              ? fullPresetLabel(option)
+                              : compactPresetLabel(option)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-              </div>
-
-              <div className="selector-group">
-                <span className="selector-label">PRESET</span>
-                <div className="selector-row" role="group" aria-label="Preset">
-                  {mode.presets.map((option, index) => {
-                    const selected = index === presetIndex;
-
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        className="selector-chip selector-chip--preset"
-                        data-selected={selected ? "true" : undefined}
-                        aria-pressed={selected}
-                        aria-disabled={canSelect ? undefined : true}
-                        onClick={() => choosePreset(index)}
-                      >
-                        {selected
-                          ? fullPresetLabel(option)
-                          : compactPresetLabel(option)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              ) : (
+                <p className="mode-preset-summary">
+                  <span className="mode-preset-summary__mode">
+                    {mode.title}
+                  </span>
+                  <span aria-hidden="true"> · </span>
+                  <span>{fullPresetLabel(preset)}</span>
+                </p>
+              )}
             </div>
 
             <div className="timer-card__meta">
@@ -533,19 +550,12 @@ function App() {
                   <span className="meta-item meta-item--round">
                     {`ROUND ${state.round}`}
                   </span>
-                  <span className="meta-total" aria-hidden="true">
-                    / ∞
-                  </span>
                   <span className="meta-separator" aria-hidden="true">
                     ·
                   </span>
                   <span className="meta-item">
                     {`NEXT: ${preview.label} ${formatRemaining(preview.ms)}`}
                   </span>
-                  <span className="meta-separator" aria-hidden="true">
-                    ·
-                  </span>
-                  <span className="meta-item">{fullPresetLabel(preset)}</span>
                 </>
               )}
             </div>
@@ -596,17 +606,14 @@ function App() {
           >
             <span className="control-button__content">
               <span className="control-button__icon" aria-hidden="true">
-                {mainLabel(state) === "Pause" ? <PauseIcon /> : <PlayIcon />}
+                {copy.primaryLabel === "PAUSE" ? <PauseIcon /> : <PlayIcon />}
               </span>
               <span className="control-button__text">
                 <span className="control-button__label">
-                  {mainLabel(state).toUpperCase()}
+                  {copy.primaryLabel}
                 </span>
                 <span className="control-button__hint" id="primary-hint">
-                  {state.status === "paused" ? "Hold to reset" : "\u00A0"}
-                </span>
-                <span className="control-button__hint" aria-hidden="true">
-                  &nbsp;
+                  {copy.primaryHint}
                 </span>
               </span>
             </span>
@@ -615,9 +622,10 @@ function App() {
           <button
             type="button"
             className="control-button control-button--mode"
-            aria-label="Mode"
+            aria-label={copy.secondaryLabel}
             aria-describedby="mode-hint"
             disabled={!canSelect}
+            data-active={copy.secondaryActive ? "true" : undefined}
             data-mode-holding={modeHoldProgress > 0 ? "true" : undefined}
             style={{ "--mode-hold": modeHoldProgress } as CSSProperties}
             {...(canSelect
@@ -655,22 +663,13 @@ function App() {
                 <ModeIcon />
               </span>
               <span className="control-button__text">
-                <span className="control-button__label">MODE</span>
-                <span className="control-button__hint">
-                  {canSelect ? "PRESS → PRESET" : "RESET TO CHANGE"}
+                <span className="control-button__label">
+                  {copy.secondaryLabel}
                 </span>
-                <span
-                  className="control-button__hint"
-                  aria-hidden={canSelect ? undefined : true}
-                >
-                  {canSelect ? "HOLD → MODE" : "\u00A0"}
+                <span className="control-button__hint" id="mode-hint">
+                  {copy.secondaryHint}
                 </span>
               </span>
-            </span>
-            <span id="mode-hint" className="visually-hidden">
-              {canSelect
-                ? "Press to cycle preset. Hold to change mode."
-                : "Reset to change mode or preset."}
             </span>
           </button>
         </div>

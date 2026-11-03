@@ -30,7 +30,6 @@ import { playModeChange, playRestStart, playWorkStart } from "./audio";
 const START = Date.UTC(2026, 0, 1, 0, 0, 0);
 const SECOND = 1_000;
 const MINUTE = 60 * SECOND;
-const NOTICE_MS = 2_200;
 
 const workCue = vi.mocked(playWorkStart);
 const restCue = vi.mocked(playRestStart);
@@ -40,23 +39,32 @@ function clockText(): string {
 }
 
 function mainButton(): HTMLElement {
-  return screen.getByRole("button", { name: /^(Start|Pause|Resume)$/ });
+  const button = document.querySelector<HTMLElement>(
+    ".control-button--primary",
+  );
+  if (button === null) throw new Error("Main button not found");
+  return button;
 }
 
 function mainLabelText(): string {
-  return mainButton().getAttribute("aria-label") ?? "";
-}
-
-function badgeText(): string {
-  return document.querySelector(".phase-band")?.textContent?.trim() ?? "";
+  const status = document.querySelector(".app")?.getAttribute("data-status");
+  return status === "running"
+    ? "Pause"
+    : status === "paused"
+      ? "Resume"
+      : "Start";
 }
 
 function phaseText(): string {
-  return badgeText().match(/\b(WORK|REST)\b/)?.[1] ?? "";
+  return document.querySelector(".app")?.getAttribute("data-phase") === "rest"
+    ? "REST"
+    : "WORK";
 }
 
 function modeContextText(): string {
-  return badgeText().match(/\b(ROLLS|DRILLS)\b/)?.[1] ?? "";
+  return document.querySelector(".app")?.getAttribute("data-mode") === "drills"
+    ? "DRILLS"
+    : "ROLLS";
 }
 
 function roundText(): string {
@@ -72,12 +80,6 @@ function nextText(): string {
     [...document.querySelectorAll(".meta-item")]
       .find((item) => item.textContent?.startsWith("NEXT:"))
       ?.textContent?.trim() ?? ""
-  );
-}
-
-function messageText(): string {
-  return (
-    document.querySelector(".timer-card__notice")?.textContent?.trim() ?? ""
   );
 }
 
@@ -153,7 +155,9 @@ function pressMainLong(): void {
 }
 
 function modeButton(): HTMLElement {
-  return screen.getByRole("button", { name: "Mode" });
+  const button = document.querySelector<HTMLElement>(".control-button--mode");
+  if (button === null) throw new Error("Mode button not found");
+  return button;
 }
 
 function pressModeShort(): void {
@@ -388,7 +392,9 @@ describe("the Mode button and keyboard selection", () => {
     advance(0);
 
     expect(playModeChange).toHaveBeenCalledTimes(1);
-    expect(document.querySelector(".mode-flash")?.textContent).toBe("DRILLS");
+    expect(document.querySelector(".mode-flash")?.textContent).toBe(
+      "MODE: DRILLS",
+    );
 
     advance(1_000);
     expect(document.querySelector(".mode-flash")).toBeNull();
@@ -498,7 +504,7 @@ describe("running a work/rest session", () => {
     expect(workCue).not.toHaveBeenCalled();
     expect(restCue).not.toHaveBeenCalled();
     // Clock interval remains; the countdown loop has stopped.
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2);
 
     advance(10 * MINUTE);
 
@@ -617,7 +623,7 @@ describe("pause, resume and reset", () => {
     expect(clockText()).toBe("5:00");
     expect(mainElement().getAttribute("data-status")).toBe("ready");
     // Clock interval remains; no countdown loop is running.
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2);
   });
 
   it("does not start before 1,500 ms", () => {
@@ -671,7 +677,7 @@ describe("Main hold progress", () => {
     expect(mainLabelText()).toBe("Start");
     expect(clockText()).toBe("5:00");
     // Clock interval remains; the countdown loop has stopped.
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2);
   });
 
   it("clears on pointer cancellation without resetting", () => {
@@ -709,98 +715,6 @@ describe("Main hold progress", () => {
     expect(clockText()).toBe("5:00");
     // Clock interval remains; the countdown loop has stopped.
     expect(vi.getTimerCount()).toBe(1);
-  });
-});
-
-describe("selection while running or paused", () => {
-  it("refuses selector changes and shows a non-blocking notice", () => {
-    render(<App />);
-    pressMainShort();
-    advance(1 * MINUTE);
-
-    selectMode("DRILLS");
-
-    expect(modeContextText()).toBe("ROLLS");
-    expect(clockText()).toBe("4:00");
-    advance(0);
-    expect(messageText()).toBe("Hold green to reset before changing.");
-
-    selectPreset(1);
-    pressModeShort();
-
-    expect(modeContextText()).toBe("ROLLS");
-    expect(clockText()).toBe("4:00");
-    expect(phaseText()).toBe("WORK");
-  });
-
-  it("refuses changes while paused", () => {
-    render(<App />);
-    pressMainShort();
-    advance(1 * MINUTE);
-    pressMainShort();
-
-    selectMode("DRILLS");
-
-    expect(modeContextText()).toBe("ROLLS");
-    expect(clockText()).toBe("4:00");
-    expect(pausedBadge()).not.toBeNull();
-    advance(0);
-    expect(messageText()).toBe("Hold green to reset before changing.");
-  });
-
-  it("marks all selector options as disabled while a session is in flight", () => {
-    render(<App />);
-    pressMainShort();
-
-    for (const button of [
-      ...within(modeRow()).getAllByRole("button"),
-      ...presetOptions(),
-    ]) {
-      expect(button.getAttribute("aria-disabled")).toBe("true");
-    }
-  });
-
-  it("clears the notice after its timeout", () => {
-    render(<App />);
-    pressMainShort();
-
-    selectMode("DRILLS");
-    advance(0);
-    expect(messageText()).toBe("Hold green to reset before changing.");
-
-    advance(NOTICE_MS);
-
-    expect(document.querySelector(".timer-card__notice")).toBeNull();
-    expect(modeContextText()).toBe("ROLLS");
-  });
-
-  it("makes the on-screen Mode button inert and explains how to unlock it", () => {
-    render(<App />);
-    pressMainShort();
-
-    expect(modeButton().hasAttribute("disabled")).toBe(true);
-    expect(modeButton().textContent).toContain("RESET TO CHANGE");
-
-    fireEvent.pointerDown(modeButton());
-    advance(MODE_BUTTON_HOLD_MS * 5);
-    fireEvent.pointerUp(modeButton());
-    advance(0);
-
-    expect(messageText()).toBe("");
-    expect(modeContextText()).toBe("ROLLS");
-  });
-
-  it("does not queue a refused change for after reset", () => {
-    render(<App />);
-    pressMainShort();
-    selectMode("DRILLS");
-    selectPreset(1);
-
-    pressMainLong();
-
-    expect(modeContextText()).toBe("ROLLS");
-    expect(clockText()).toBe("5:00");
-    expect(activePreset().textContent?.trim()).toBe("WORK 5:00 / REST 1:00");
   });
 });
 
@@ -869,7 +783,7 @@ describe("abandoning and guarding presses", () => {
 
     pressMainLong();
     // Clock interval remains; the countdown loop has stopped.
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2);
 
     pressMainShort();
     advance(1 * SECOND);

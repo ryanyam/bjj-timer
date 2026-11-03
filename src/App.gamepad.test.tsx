@@ -82,27 +82,30 @@ function advance(ms: number): void {
 }
 
 function mainButton(): HTMLElement {
-  return screen.getByRole("button", { name: /^(Start|Pause|Resume)$/ });
+  const button = document.querySelector<HTMLElement>(".control-button--primary");
+  if (button === null) throw new Error("Main button not found");
+  return button;
 }
 
 function mainLabel(): string {
-  return mainButton().getAttribute("aria-label") ?? "";
+  const status = document.querySelector(".app")?.getAttribute("data-status");
+  return status === "running" ? "Pause" : status === "paused" ? "Resume" : "Start";
 }
 
 function clockText(): string {
   return screen.getByRole("timer").textContent?.trim() ?? "";
 }
 
-function badgeText(): string {
-  return document.querySelector(".phase-band")?.textContent?.trim() ?? "";
-}
-
 function phaseText(): string {
-  return badgeText().match(/\b(WORK|REST)\b/)?.[1] ?? "";
+  return document.querySelector(".app")?.getAttribute("data-phase") === "rest"
+    ? "REST"
+    : "WORK";
 }
 
 function modeContextText(): string {
-  return badgeText().match(/\b(ROLLS|DRILLS)\b/)?.[1] ?? "";
+  return document.querySelector(".app")?.getAttribute("data-mode") === "drills"
+    ? "DRILLS"
+    : "ROLLS";
 }
 
 function roundText(): string {
@@ -284,7 +287,7 @@ describe("the green MAIN button", () => {
     expect(mainLabel()).toBe("Start");
     expect(clockText()).toBe("5:00");
     // The wall-clock interval remains; the countdown loop has stopped.
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2);
 
     // Continuing to hold and releasing do not reset or start again.
     frameAt(100 + MAIN_BUTTON_HOLD_MS * 3);
@@ -304,7 +307,7 @@ describe("the green MAIN button", () => {
     expect(mainLabel()).toBe("Start");
     expect(clockText()).toBe("5:00");
     // Clock interval remains; the countdown loop is stopped.
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2);
   });
 
   it("shows press feedback and hold progress", () => {

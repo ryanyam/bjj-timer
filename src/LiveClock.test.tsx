@@ -21,7 +21,7 @@ describe("LiveClock", () => {
 
     expect(
       container.querySelector(".app-clock__date")?.textContent?.trim(),
-    ).toBe("TUE, NOV 3, 2026");
+    ).toBe("Tue, Nov 3");
     expect(clockTime(container)).toBe("10:44");
     expect(
       container.querySelector(".app-clock__period")?.textContent?.trim(),

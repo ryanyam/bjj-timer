@@ -6,7 +6,7 @@ describe("formatClock", () => {
     const morning = new Date(2026, 10, 3, 10, 44, 45);
 
     expect(formatClock(morning, "en-US")).toEqual({
-      date: "TUE, NOV 3, 2026",
+      date: "Tue, Nov 3",
       time: "10:44",
       period: "AM",
     });
@@ -16,7 +16,7 @@ describe("formatClock", () => {
     const afternoon = new Date(2026, 10, 3, 15, 5, 9);
 
     expect(formatClock(afternoon, "en-US")).toEqual({
-      date: "TUE, NOV 3, 2026",
+      date: "Tue, Nov 3",
       time: "03:05",
       period: "PM",
     });
@@ -26,7 +26,7 @@ describe("formatClock", () => {
     const midnight = new Date(2026, 10, 3, 0, 0, 0);
 
     expect(formatClock(midnight, "en-US")).toEqual({
-      date: "TUE, NOV 3, 2026",
+      date: "Tue, Nov 3",
       time: "12:00",
       period: "AM",
     });

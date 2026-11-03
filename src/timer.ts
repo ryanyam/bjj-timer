@@ -7,7 +7,10 @@
  * "time left" means.
  */
 
-/** Length of one round, in milliseconds. Single-round timer for now. */
+/**
+ * A five-minute reference duration for the formatting tests.
+ * Training work/rest durations live in src/training.ts, not here.
+ */
 export const ROUND_MS = 5 * 60 * 1000;
 
 const MS_PER_SECOND = 1_000;

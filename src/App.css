@@ -3,20 +3,21 @@
  *
  * Only the timer's own rules live here: colours come from the tokens index.css
  * defines, so light/dark follows the OS with no extra CSS, and the page frame
- * (full height, no scrolling) is index.css's job. Nothing here depends on which
- * stylesheet is imported first.
+ * (full height, no scrolling) is index.css's job.
+ *
+ * The selection rows are intentionally compact and stable-height: changing a
+ * preset or mode must never move the countdown.
  */
 
 .timer {
-  /* Four rows: the mode indicator, the clock, and the controls keep their
-     natural height; the clock takes whatever space is left. The last row is the
-     physical-panel status and hint, deliberately the smallest thing on screen. */
+  /* Selection, readout, controls, physical-panel status. The readout takes the
+     remaining space; its own rows have stable heights. */
   height: 100%;
   display: grid;
   grid-template-rows: auto 1fr auto auto;
   place-items: center;
-  gap: clamp(1rem, 3vh, 3rem);
-  padding: clamp(1rem, 4vh, 4rem);
+  gap: clamp(0.5rem, 1.4vh, 1.25rem);
+  padding: clamp(0.75rem, 3vh, 2.5rem);
   box-sizing: border-box;
   background: var(--bg);
   color: var(--text-h);
@@ -25,58 +26,244 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
+
+  /* Consistent rest treatment for both modes. */
+  --rest-accent: #1d4ed8;
+  --rest-bg: rgba(29, 78, 216, 0.12);
 }
 
-.timer__mode {
+/* Distinct mode accents, used by the selector, mode title, phase label and
+   primary controls. Text always names the mode and phase too, so colour is
+   never the only signal. */
+.timer[data-mode="rolls"] {
+  --mode-accent: #c2410c;
+  --mode-accent-bg: rgba(194, 65, 12, 0.12);
+  --mode-accent-border: rgba(194, 65, 12, 0.55);
+}
+
+.timer[data-mode="drills"] {
+  --mode-accent: #0f766e;
+  --mode-accent-bg: rgba(15, 118, 110, 0.12);
+  --mode-accent-border: rgba(15, 118, 110, 0.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  .timer {
+    --rest-accent: #93c5fd;
+    --rest-bg: rgba(147, 197, 253, 0.14);
+  }
+
+  .timer[data-mode="rolls"] {
+    --mode-accent: #fb923c;
+    --mode-accent-bg: rgba(251, 146, 60, 0.16);
+    --mode-accent-border: rgba(251, 146, 60, 0.6);
+  }
+
+  .timer[data-mode="drills"] {
+    --mode-accent: #2dd4bf;
+    --mode-accent-bg: rgba(45, 212, 191, 0.16);
+    --mode-accent-border: rgba(45, 212, 191, 0.6);
+  }
+}
+
+.timer__selection {
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.25rem;
-  text-align: center;
+  gap: 0.3rem;
 }
 
-.timer__mode-value {
-  font-size: clamp(1.25rem, 3vw, 2.25rem);
-  font-weight: 600;
-  letter-spacing: 0.02em;
+.timer__selector-row {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  /* If more options are added later and the row overflows, keep the first
+     option reachable instead of centering content out of view. */
+  justify-content: safe center;
+  align-items: stretch;
+  gap: clamp(0.35rem, 0.8vw, 0.75rem);
+  width: 100%;
+  max-width: 64rem;
+  overflow-x: auto;
+  padding: 0.1rem;
+  scrollbar-width: thin;
 }
 
-.timer__mode-note {
-  /* Readable rather than decorative: no uppercase, and a floor of 14px so it is
-     still legible on a phone. --text on --bg is 5.7:1 in light mode and 7.0:1 in
-     dark, both above the 4.5:1 WCAG AA minimum. */
-  font-size: clamp(0.875rem, 1.4vw, 1.125rem);
+.timer__selector {
+  font: inherit;
+  flex: 0 0 auto;
+  border: 2px solid transparent;
+  border-bottom-width: 3px;
+  border-radius: 0.5rem;
+  background: transparent;
   color: var(--text);
+  cursor: pointer;
+  line-height: 1.2;
+  padding: 0.35em 0.9em;
+  white-space: nowrap;
+  touch-action: manipulation;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.timer__selector--mode {
+  font-size: clamp(0.9rem, 1.35vw, 1.05rem);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+}
+
+.timer__selector--mode[data-selected="true"] {
+  font-size: clamp(1.15rem, 2vw, 1.6rem);
+  font-weight: 700;
+}
+
+.timer__selector--preset {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: clamp(0.8rem, 1.15vw, 0.95rem);
+}
+
+.timer__selector--preset[data-selected="true"] {
+  font-size: clamp(0.9rem, 1.4vw, 1.1rem);
+  font-weight: 700;
+}
+
+/* Selected: filled container, heavier underline and bold text — not colour
+   alone. Inactive options stay readable (--text) and simply smaller. */
+.timer__selector[data-selected="true"] {
+  color: var(--mode-accent);
+  background: var(--mode-accent-bg);
+  border-color: var(--mode-accent-border);
+  border-bottom-color: var(--mode-accent);
+}
+
+.timer__selector:hover:not([aria-disabled="true"]) {
+  border-color: var(--mode-accent-border);
+  background: var(--mode-accent-bg);
+}
+
+.timer__selector:focus-visible {
+  outline: 2px solid var(--mode-accent);
+  outline-offset: 2px;
+}
+
+/* Locked while running or paused. They stay visible and readable, but no
+   hover/action styling invites a tap; a click still yields the notice. */
+.timer__selector[aria-disabled="true"] {
+  cursor: default;
+}
+
+.timer__selector[aria-disabled="true"]:not([data-selected="true"]) {
+  background: transparent;
+  border-color: transparent;
+}
+
+.timer__selector[aria-disabled="true"][data-selected="true"] {
+  color: var(--mode-accent);
+  background: var(--mode-accent-bg);
+  border-color: var(--mode-accent-border);
+  border-bottom-color: var(--mode-accent-border);
+}
+
+.timer__message {
+  /* Two reserved lines: a notice must not move the countdown, even if it wraps
+     on a narrower display. */
+  margin: 0;
+  min-height: 2.8em;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
+  color: var(--text);
+  font-size: clamp(0.78rem, 1.1vw, 0.95rem);
+}
+
+.timer__message--notice {
+  color: var(--mode-accent);
+  font-weight: 600;
 }
 
 .timer__readout {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: clamp(0.25rem, 1vh, 0.75rem);
+  justify-content: center;
+  gap: clamp(0.15rem, 0.6vh, 0.5rem);
+  min-height: 0;
+  width: 100%;
+}
+
+.timer__context {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.2em;
+  white-space: nowrap;
+}
+
+.timer__mode-context {
+  font-size: clamp(0.9rem, 1.4vw, 1.1rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--mode-accent);
+}
+
+.timer__context-separator {
+  color: var(--text);
+}
+
+.timer__phase {
+  font-size: clamp(1.4rem, 2.6vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--mode-accent);
+}
+
+.timer[data-phase="rest"] .timer__phase {
+  color: var(--rest-accent);
+}
+
+.timer__paused {
+  padding: 0.15em 0.55em;
+  border-radius: 0.25rem;
+  background: var(--rest-bg);
+  color: var(--rest-accent);
+  font-size: clamp(0.75rem, 1.1vw, 0.9rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
 .timer__clock {
-  /* Scales from a laptop to a wall-mounted TV with no media query.
-     This one number is the dial to turn if the digits should be bigger. */
-  font-size: clamp(3.5rem, 22vw, 20rem);
+  /* Largest element on screen. The min() keeps it from pushing the rest of the
+     layout off a short kiosk viewport. Stable-width digits prevent sideways
+     movement as the value changes. */
+  font-size: clamp(3.25rem, min(19vw, 26vh), 18rem);
   font-family: var(--mono);
   font-weight: 700;
   line-height: 1;
-
-  /* Equal-width digits, so the clock does not shift sideways when a "1" appears. */
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.02em;
 }
 
-.timer__duration {
-  /* The configured round length. Deliberately quiet so the countdown stays
-     dominant, but never smaller than 16px and never below AA contrast. */
-  margin: 0;
-  font-family: var(--mono);
-  font-size: clamp(1rem, 1.8vw, 1.5rem);
+.timer__meta {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: baseline;
+  gap: 0.4rem 1.2rem;
   color: var(--text);
+  font-family: var(--mono);
+  font-size: clamp(0.9rem, 1.4vw, 1.15rem);
   font-variant-numeric: tabular-nums;
+}
+
+.timer__round {
+  color: var(--text-h);
+  font-weight: 600;
 }
 
 .timer__controls {
@@ -105,47 +292,45 @@
   padding: 0.6em 1.6em;
   border: 2px solid var(--border);
   border-radius: 0.5rem;
-  color: var(--accent);
-  /* At rest --main-hold is 0%, so this is exactly --accent-bg. During a
+  color: var(--mode-accent);
+  /* At rest --main-hold is 0%, so this is exactly --mode-accent-bg. During a
      physical press the fill grows to show progress towards reset. */
   background: linear-gradient(
     to right,
-    var(--accent-border) var(--main-hold, 0%),
-    var(--accent-bg) var(--main-hold, 0%)
+    var(--mode-accent-border) var(--main-hold, 0%),
+    var(--mode-accent-bg) var(--main-hold, 0%)
   );
   cursor: pointer;
-  transition: border-color 0.3s;
+  transition: border-color 0.2s;
 
   /* Keeps the browser from spending a double-tap-to-zoom delay on taps. */
   touch-action: manipulation;
 }
 
 .timer__controls button:hover:not([aria-disabled="true"]) {
-  border-color: var(--accent-border);
+  border-color: var(--mode-accent-border);
 }
 
 /* Immediate, CSS-only feedback that the press registered. This shows while the
-   button is held and disappears on release or cancellation; it does not change
-   when an action fires, which is still on release. */
+   button is held and disappears on release or cancellation. */
 .timer__controls button:active:not([aria-disabled="true"]) {
-  border-color: var(--accent);
+  border-color: var(--mode-accent);
   transform: translateY(1px);
 }
 
-/* The green physical button is down: echo the same pressed look on screen,
-   even when the on-screen button itself is not being touched. */
+/* The green physical button is down: echo the same pressed look on screen. */
 .timer__controls button[data-main-held="true"] {
-  border-color: var(--accent);
+  border-color: var(--mode-accent);
   transform: translateY(1px);
 }
 
 .timer__controls button:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--mode-accent);
   outline-offset: 2px;
 }
 
-/* Mode is shown as unavailable while a round is in flight. It stays focusable —
-   disabling it would blur whatever the operator was focused on. */
+/* Mode is shown as unavailable while a session is in flight. It stays
+   focusable — disabling it would blur whatever the operator was focused on. */
 .timer__controls button:disabled,
 .timer__controls button[aria-disabled="true"] {
   opacity: 0.4;
@@ -153,8 +338,8 @@
 }
 
 /*
- * Physical panel status and hint. Kept small and muted so it never competes with
- * the countdown; --text stays above the 4.5:1 WCAG AA contrast minimum.
+ * Physical panel status and hint. Kept small and muted so it never competes
+ * with the countdown; --text stays above the 4.5:1 WCAG AA contrast minimum.
  */
 .timer__gamepad {
   display: flex;
@@ -188,4 +373,11 @@
 
 .timer__gamepad-hint {
   margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .timer__selector,
+  .timer__controls button {
+    transition: none;
+  }
 }

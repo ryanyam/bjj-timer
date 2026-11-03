@@ -1,82 +1,131 @@
 import { StrictMode } from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { MAIN_BUTTON_HOLD_MS, MODE_BUTTON_HOLD_MS } from "./gamepad";
 
+vi.mock("./audio", () => ({
+  unlockAudio: vi.fn(),
+  playWorkStart: vi.fn(),
+  playRestStart: vi.fn(),
+}));
+
+import { playRestStart, playWorkStart } from "./audio";
+
 /**
- * Spec for the two-button operator interface in src/App.tsx.
+ * Spec for the Rolls/Drills interface in src/App.tsx.
  *
  * The contract these tests pin down:
- *   - exactly two interactive controls, Main and Mode
- *   - an element with role="timer" showing the remaining time as "M:SS"
- *   - a mode/selection indicator reading "Mode <label>"
- *   - Main's label always names the next short-press action
- *   - one press produces exactly one action, short or long, never both
+ *   - two mode options and the selected mode's two presets, each appearing once
+ *   - a dominant active option and readable inactive alternatives
+ *   - selector clicks and the physical-equivalent Mode button share actions
+ *   - Ready-only selection, with a non-blocking locked message
+ *   - work/rest display, round numbering, pause/resume/reset, and one cue per
+ *     live transition
  *
- * What is deliberately *not* asserted: CSS, class names, pixel sizes.
+ * CSS, pixel sizes, and device behaviour are deliberately not asserted.
  */
 
 const START = Date.UTC(2026, 0, 1, 0, 0, 0);
 const SECOND = 1_000;
 const MINUTE = 60 * SECOND;
+const NOTICE_MS = 2_200;
 
-const MAIN_LABELS = ["Start", "Pause", "Resume", "Reset"];
+const workCue = vi.mocked(playWorkStart);
+const restCue = vi.mocked(playRestStart);
 
 function clockText(): string {
-  return screen.getByRole("timer").textContent ?? "";
+  return screen.getByRole("timer").textContent?.trim() ?? "";
 }
 
-/** Main by any of its labels, so the helper cannot be hidden by a label change. */
 function mainButton(): HTMLElement {
-  const button = screen
-    .getAllByRole("button")
-    .find((candidate) =>
-      MAIN_LABELS.includes(candidate.textContent?.trim() ?? ""),
-    );
-
-  if (button === undefined) {
-    throw new Error("Main button not found");
-  }
-
-  return button;
+  return screen.getByRole("button", { name: /^(Start|Pause|Resume)$/ });
 }
 
 function mainLabelText(): string {
   return mainButton().textContent?.trim() ?? "";
 }
 
-function modeButton(): HTMLElement {
-  return screen.getByRole("button", { name: "Mode" });
+function modeRow(): HTMLElement {
+  return screen.getByRole("group", { name: "Main mode" });
 }
 
-/** The visible selection indicator, e.g. "Mode 2b". */
-function modeText(): string {
-  return screen.getByText(/^Mode \S+$/).textContent ?? "";
+function presetRow(): HTMLElement {
+  return screen.getByRole("group", { name: "Preset" });
 }
 
-/** The fixed round-length reference, e.g. "Round: 5:00". */
-function durationText(): string {
-  return screen.getByText(/^Round: /).textContent ?? "";
+function modeOption(name: "ROLLS" | "DRILLS"): HTMLElement {
+  return within(modeRow()).getByRole("button", { name });
+}
+
+function presetOptions(): HTMLElement[] {
+  return within(presetRow()).getAllByRole("button");
+}
+
+function presetLabels(): string[] {
+  return presetOptions().map((button) => button.textContent?.trim() ?? "");
+}
+
+function activePreset(): HTMLElement {
+  const active = presetOptions().find(
+    (button) => button.getAttribute("aria-pressed") === "true",
+  );
+
+  if (active === undefined) {
+    throw new Error("No active preset button");
+  }
+
+  return active;
+}
+
+function phaseText(): string {
+  return document.querySelector(".timer__phase")?.textContent?.trim() ?? "";
+}
+
+function modeContextText(): string {
+  return (
+    document.querySelector(".timer__mode-context")?.textContent?.trim() ?? ""
+  );
+}
+
+function roundText(): string {
+  return document.querySelector(".timer__round")?.textContent?.trim() ?? "";
+}
+
+function nextText(): string {
+  return document.querySelector(".timer__next")?.textContent?.trim() ?? "";
+}
+
+function messageText(): string {
+  return screen.getByRole("status").textContent?.trim() ?? "";
+}
+
+function mainElement(): HTMLElement {
+  const element = document.querySelector(".timer");
+
+  if (!(element instanceof HTMLElement)) {
+    throw new Error("Timer root not found");
+  }
+
+  return element;
+}
+
+function pausedBadge(): HTMLElement | null {
+  return screen.queryByText("PAUSED");
 }
 
 function advance(ms: number): void {
-  // With fake timers, advanceTimersByTime moves the faked clock as well as the
-  // pending callbacks, so the timer's reading of "now" and its scheduled tick
-  // stay in step — the same way real time passes in the browser.
   act(() => {
     vi.advanceTimersByTime(ms);
   });
 }
 
-/** Released immediately: one short action, and no time gone by. */
 function shortPress(button: HTMLElement): void {
   fireEvent.pointerDown(button);
   fireEvent.pointerUp(button);
 }
 
-/** Held to the threshold: the long action fires while the button is still down. */
-function longPress(button: HTMLElement, holdMs = MAIN_BUTTON_HOLD_MS): void {
+function longPress(button: HTMLElement, holdMs: number): void {
   fireEvent.pointerDown(button);
   advance(holdMs);
   fireEvent.pointerUp(button);
@@ -87,16 +136,33 @@ function pressMainShort(): void {
 }
 
 function pressMainLong(): void {
-  longPress(mainButton());
+  longPress(mainButton(), MAIN_BUTTON_HOLD_MS);
+}
+
+function modeButton(): HTMLElement {
+  return screen.getByRole("button", { name: "Mode" });
 }
 
 function pressModeShort(): void {
   shortPress(modeButton());
 }
 
-/** The white hardware button's hold threshold, which the on-screen Mode shares. */
 function pressModeLong(): void {
   longPress(modeButton(), MODE_BUTTON_HOLD_MS);
+}
+
+function selectMode(name: "ROLLS" | "DRILLS"): void {
+  fireEvent.click(modeOption(name));
+}
+
+function selectPreset(index: number): void {
+  const option = presetOptions()[index];
+
+  if (option === undefined) {
+    throw new Error(`No preset at index ${index}`);
+  }
+
+  fireEvent.click(option);
 }
 
 function blurWindow(): void {
@@ -108,67 +174,570 @@ function blurWindow(): void {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(START);
+  vi.clearAllMocks();
 });
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("the countdown display", () => {
-  it("shows a full five minutes before the round starts", () => {
+describe("the initial selection", () => {
+  it("shows Rolls, 5:00 work / 1:00 rest, ready at round 1", () => {
     render(<App />);
 
+    expect(clockText()).toBe("5:00");
+    expect(phaseText()).toBe("ROLL");
+    expect(modeContextText()).toBe("ROLLS");
+    expect(roundText()).toBe("ROUND 1");
+    expect(nextText()).toBe("NEXT: ROLL 5:00");
+    expect(mainLabelText()).toBe("Start");
+    expect(pausedBadge()).toBeNull();
+    expect(mainElement().getAttribute("data-mode")).toBe("rolls");
+    expect(mainElement().getAttribute("data-phase")).toBe("work");
+    expect(mainElement().getAttribute("data-status")).toBe("ready");
+  });
+
+  it("shows each main mode exactly once, with Rolls selected", () => {
+    render(<App />);
+
+    const options = within(modeRow()).getAllByRole("button");
+
+    expect(options.map((button) => button.textContent?.trim())).toEqual([
+      "ROLLS",
+      "DRILLS",
+    ]);
+    expect(modeOption("ROLLS").getAttribute("aria-pressed")).toBe("true");
+    expect(modeOption("DRILLS").getAttribute("aria-pressed")).toBe("false");
+    expect(modeOption("ROLLS").getAttribute("data-selected")).toBe("true");
+    expect(modeOption("DRILLS").getAttribute("data-selected")).toBeNull();
+  });
+
+  it("shows only the selected mode's presets, once each, with the active one explicit", () => {
+    render(<App />);
+
+    expect(presetLabels()).toEqual(["WORK 5:00 / REST 1:00", "3:00 / 1:00"]);
+    expect(activePreset().textContent?.trim()).toBe("WORK 5:00 / REST 1:00");
+    expect(activePreset().getAttribute("aria-pressed")).toBe("true");
+    expect(presetOptions()[1].getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("shows the compact Ready-state control hint", () => {
+    render(<App />);
+
+    expect(messageText()).toBe(
+      "White: preset · Hold white: mode · Green: start",
+    );
+  });
+
+  it("marks selectors as available while ready", () => {
+    render(<App />);
+
+    for (const button of [
+      ...within(modeRow()).getAllByRole("button"),
+      ...presetOptions(),
+    ]) {
+      expect(button.getAttribute("aria-disabled")).toBeNull();
+    }
+  });
+});
+
+describe("choosing a mode or preset while ready", () => {
+  it("switches to Drills and shows only its presets", () => {
+    render(<App />);
+
+    selectMode("DRILLS");
+
+    expect(clockText()).toBe("2:00");
+    expect(phaseText()).toBe("DRILL");
+    expect(modeContextText()).toBe("DRILLS");
+    expect(nextText()).toBe("NEXT: DRILL 2:00");
+    expect(presetLabels()).toEqual(["WORK 2:00 / REST 0:30", "1:00 / 0:30"]);
+    expect(modeOption("DRILLS").getAttribute("aria-pressed")).toBe("true");
+    expect(modeOption("ROLLS").getAttribute("aria-pressed")).toBe("false");
+    expect(mainElement().getAttribute("data-mode")).toBe("drills");
+  });
+
+  it("loads a chosen preset's full work duration without starting", () => {
+    render(<App />);
+
+    selectPreset(1);
+
+    expect(clockText()).toBe("3:00");
+    expect(activePreset().textContent?.trim()).toBe("WORK 3:00 / REST 1:00");
+    expect(presetLabels()[0]).toBe("5:00 / 1:00");
+    expect(mainLabelText()).toBe("Start");
+    expect(roundText()).toBe("ROUND 1");
+    expect(mainElement().getAttribute("data-status")).toBe("ready");
+  });
+
+  it("remembers each mode's last selected preset", () => {
+    render(<App />);
+
+    selectPreset(1);
+    expect(clockText()).toBe("3:00");
+
+    selectMode("DRILLS");
+    selectPreset(1);
+    expect(clockText()).toBe("1:00");
+
+    selectMode("ROLLS");
+    expect(clockText()).toBe("3:00");
+    expect(activePreset().textContent?.trim()).toBe("WORK 3:00 / REST 1:00");
+
+    selectMode("DRILLS");
+    expect(clockText()).toBe("1:00");
+    expect(activePreset().textContent?.trim()).toBe("WORK 1:00 / REST 0:30");
+  });
+
+  it("uses the selector's mode and preset actions through the same reducer", () => {
+    render(<App />);
+
+    selectMode("DRILLS");
+    selectPreset(0);
+
+    // The Mode button then cycles from exactly the same selected state.
+    pressModeShort();
+
+    expect(activePreset().textContent?.trim()).toBe("WORK 1:00 / REST 0:30");
+  });
+});
+
+describe("the Mode button and keyboard selection", () => {
+  it("cycles presets on a short press, wrapping", () => {
+    render(<App />);
+
+    pressModeShort();
+    expect(clockText()).toBe("3:00");
+
+    pressModeShort();
+    expect(clockText()).toBe("5:00");
+
+    pressModeShort();
+    expect(clockText()).toBe("3:00");
+  });
+
+  it("cycles main modes on a hold, without also cycling the preset", () => {
+    render(<App />);
+
+    pressModeLong();
+
+    expect(modeContextText()).toBe("DRILLS");
+    expect(clockText()).toBe("2:00");
+    expect(activePreset().textContent?.trim()).toBe("WORK 2:00 / REST 0:30");
+
+    pressModeLong();
+
+    expect(modeContextText()).toBe("ROLLS");
+    expect(clockText()).toBe("5:00");
+  });
+
+  it("switches mode at 800 ms, not earlier, and release does nothing extra", () => {
+    render(<App />);
+
+    fireEvent.pointerDown(modeButton());
+    advance(MODE_BUTTON_HOLD_MS - 1);
+    expect(modeContextText()).toBe("ROLLS");
+
+    advance(1);
+    expect(modeContextText()).toBe("DRILLS");
+
+    fireEvent.pointerUp(modeButton());
+
+    expect(modeContextText()).toBe("DRILLS");
+    expect(activePreset().textContent?.trim()).toBe("WORK 2:00 / REST 0:30");
+  });
+
+  it("selects the next preset from keyboard activation of the Mode button", () => {
+    render(<App />);
+
+    fireEvent.click(modeButton(), { detail: 0 });
+
+    expect(clockText()).toBe("3:00");
+  });
+
+  it("allows keyboard activation of a visible selector option", () => {
+    render(<App />);
+
+    fireEvent.click(modeOption("DRILLS"));
+
+    expect(modeContextText()).toBe("DRILLS");
+    expect(clockText()).toBe("2:00");
+  });
+});
+
+describe("running a work/rest session", () => {
+  it("starts work immediately and shows the next rest preview", () => {
+    render(<App />);
+
+    pressMainShort();
+
+    expect(mainLabelText()).toBe("Pause");
+    expect(clockText()).toBe("5:00");
+    expect(phaseText()).toBe("ROLL");
+    expect(roundText()).toBe("ROUND 1");
+    expect(nextText()).toBe("NEXT: REST 1:00");
+    expect(mainElement().getAttribute("data-status")).toBe("running");
+    expect(workCue).toHaveBeenCalledTimes(1);
+    expect(restCue).not.toHaveBeenCalled();
+  });
+
+  it("moves work to the full rest at the deadline, keeping the round", () => {
+    render(<App />);
+    pressMainShort();
+    vi.clearAllMocks();
+
+    advance(5 * MINUTE);
+
+    expect(phaseText()).toBe("REST");
+    expect(clockText()).toBe("1:00");
+    expect(roundText()).toBe("ROUND 1");
+    expect(nextText()).toBe("NEXT: ROLL 5:00");
+    expect(mainElement().getAttribute("data-phase")).toBe("rest");
+    expect(restCue).toHaveBeenCalledTimes(1);
+    expect(workCue).not.toHaveBeenCalled();
+  });
+
+  it("starts the next full work and increments the round after rest", () => {
+    render(<App />);
+    pressMainShort();
+    advance(5 * MINUTE);
+    vi.clearAllMocks();
+
+    advance(1 * MINUTE);
+
+    expect(phaseText()).toBe("ROLL");
+    expect(clockText()).toBe("5:00");
+    expect(roundText()).toBe("ROUND 2");
+    expect(nextText()).toBe("NEXT: REST 1:00");
+    expect(workCue).toHaveBeenCalledTimes(1);
+    expect(restCue).not.toHaveBeenCalled();
+  });
+
+  it("uses Drills work and rest durations", () => {
+    render(<App />);
+    selectMode("DRILLS");
+    selectPreset(1);
+    pressMainShort();
+
+    expect(clockText()).toBe("1:00");
+    expect(nextText()).toBe("NEXT: REST 0:30");
+
+    advance(1 * MINUTE);
+
+    expect(phaseText()).toBe("REST");
+    expect(clockText()).toBe("0:30");
+    expect(nextText()).toBe("NEXT: DRILL 1:00");
+  });
+
+  it("does not fire a second cue from a delayed, repeated render", () => {
+    render(<App />);
+    pressMainShort();
+    advance(5 * MINUTE);
+    vi.clearAllMocks();
+
+    // No additional clock movement: the effect must not replay the cue.
+    advance(0);
+    expect(restCue).not.toHaveBeenCalled();
+  });
+
+  it("plays one live cue after a late tick crosses several phases", () => {
+    render(<App />);
+    pressMainShort();
+    vi.clearAllMocks();
+
+    // One callback sees a clock seven minutes ahead: work -> rest -> next work.
+    act(() => {
+      vi.setSystemTime(START + 7 * MINUTE);
+      vi.advanceTimersToNextTimer();
+    });
+
+    expect(phaseText()).toBe("ROLL");
+    expect(roundText()).toBe("ROUND 2");
+    expect(workCue).toHaveBeenCalledTimes(1);
+    expect(restCue).not.toHaveBeenCalled();
+  });
+
+  it("does not fire a cue on reset and removes the ticking loop", () => {
+    render(<App />);
+    pressMainShort();
+    advance(2 * MINUTE);
+    vi.clearAllMocks();
+
+    pressMainLong();
+
+    expect(workCue).not.toHaveBeenCalled();
+    expect(restCue).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+
+    advance(10 * MINUTE);
+
+    expect(workCue).not.toHaveBeenCalled();
+    expect(restCue).not.toHaveBeenCalled();
     expect(clockText()).toBe("5:00");
   });
 });
 
-describe("a running round", () => {
-  it("counts down as real time passes", () => {
-    // Note: this one cannot tell a timestamp-driven countdown from a naive
-    // decrementing counter — both show 4:59 after one second. That distinction
-    // is made by the two tests below, which is why they exist.
+describe("pause, resume and reset", () => {
+  it("freezes work, shows PAUSED, and resumes from the same remainder", () => {
     render(<App />);
     pressMainShort();
+    advance(2 * MINUTE);
+    pressMainShort();
+
+    expect(mainLabelText()).toBe("Resume");
+    expect(pausedBadge()).not.toBeNull();
+    expect(clockText()).toBe("3:00");
+    expect(phaseText()).toBe("ROLL");
+    expect(mainElement().getAttribute("data-status")).toBe("paused");
+
+    advance(10 * MINUTE);
+    expect(clockText()).toBe("3:00");
+    expect(roundText()).toBe("ROUND 1");
+
+    pressMainShort();
+    expect(pausedBadge()).toBeNull();
+    expect(mainLabelText()).toBe("Pause");
+    expect(clockText()).toBe("3:00");
 
     advance(1 * SECOND);
-
-    expect(clockText()).toBe("4:59");
+    expect(clockText()).toBe("2:59");
   });
 
-  it("is still correct after a long jump, as if the tab had been throttled", () => {
+  it("freezes and resumes a rest phase", () => {
+    render(<App />);
+    pressMainShort();
+    advance(5 * MINUTE);
+    advance(30 * SECOND);
+
+    pressMainShort();
+
+    expect(pausedBadge()).not.toBeNull();
+    expect(phaseText()).toBe("REST");
+    expect(clockText()).toBe("0:30");
+
+    advance(10 * MINUTE);
+    expect(clockText()).toBe("0:30");
+
+    pressMainShort();
+    expect(clockText()).toBe("0:30");
+
+    advance(30 * SECOND);
+    expect(phaseText()).toBe("ROLL");
+    expect(roundText()).toBe("ROUND 2");
+    expect(clockText()).toBe("5:00");
+  });
+
+  it("resets from running work to Ready, round 1, preserving selection", () => {
+    render(<App />);
+    selectMode("DRILLS");
+    selectPreset(1);
+    pressMainShort();
+    advance(30 * SECOND);
+    vi.clearAllMocks();
+
+    pressMainLong();
+
+    expect(mainLabelText()).toBe("Start");
+    expect(clockText()).toBe("1:00");
+    expect(phaseText()).toBe("DRILL");
+    expect(modeContextText()).toBe("DRILLS");
+    expect(roundText()).toBe("ROUND 1");
+    expect(nextText()).toBe("NEXT: DRILL 1:00");
+    expect(pausedBadge()).toBeNull();
+    expect(mainElement().getAttribute("data-status")).toBe("ready");
+    expect(workCue).not.toHaveBeenCalled();
+    expect(restCue).not.toHaveBeenCalled();
+  });
+
+  it("resets from running rest", () => {
+    render(<App />);
+    pressMainShort();
+    advance(5 * MINUTE);
+
+    pressMainLong();
+
+    expect(phaseText()).toBe("ROLL");
+    expect(clockText()).toBe("5:00");
+    expect(roundText()).toBe("ROUND 1");
+  });
+
+  it("resets from Paused and clears the paused state", () => {
+    render(<App />);
+    pressMainShort();
+    advance(2 * MINUTE);
+    pressMainShort();
+    expect(pausedBadge()).not.toBeNull();
+
+    pressMainLong();
+
+    expect(pausedBadge()).toBeNull();
+    expect(mainLabelText()).toBe("Start");
+    expect(clockText()).toBe("5:00");
+  });
+
+  it("does not start from Ready when a Main hold is released", () => {
+    render(<App />);
+
+    fireEvent.pointerDown(mainButton());
+    advance(MAIN_BUTTON_HOLD_MS);
+    fireEvent.pointerUp(mainButton());
+
+    expect(mainLabelText()).toBe("Start");
+    expect(clockText()).toBe("5:00");
+    expect(mainElement().getAttribute("data-status")).toBe("ready");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not start before 1,500 ms", () => {
+    render(<App />);
+
+    fireEvent.pointerDown(mainButton());
+    advance(MAIN_BUTTON_HOLD_MS - 1);
+    fireEvent.pointerUp(mainButton());
+
+    expect(mainLabelText()).toBe("Pause");
+    expect(clockText()).toBe("5:00");
+  });
+});
+
+describe("selection while running or paused", () => {
+  it("refuses selector changes and shows a non-blocking notice", () => {
+    render(<App />);
+    pressMainShort();
+    advance(1 * MINUTE);
+
+    selectMode("DRILLS");
+
+    expect(modeContextText()).toBe("ROLLS");
+    expect(clockText()).toBe("4:00");
+    advance(0);
+    expect(messageText()).toBe("Hold green to reset before changing.");
+
+    selectPreset(1);
+    pressModeShort();
+
+    expect(modeContextText()).toBe("ROLLS");
+    expect(clockText()).toBe("4:00");
+    expect(phaseText()).toBe("ROLL");
+  });
+
+  it("refuses changes while paused", () => {
+    render(<App />);
+    pressMainShort();
+    advance(1 * MINUTE);
+    pressMainShort();
+
+    selectMode("DRILLS");
+
+    expect(modeContextText()).toBe("ROLLS");
+    expect(clockText()).toBe("4:00");
+    expect(pausedBadge()).not.toBeNull();
+    advance(0);
+    expect(messageText()).toBe("Hold green to reset before changing.");
+  });
+
+  it("marks all selector options as disabled while a session is in flight", () => {
     render(<App />);
     pressMainShort();
 
-    advance(2 * MINUTE + 34 * SECOND);
-
-    expect(clockText()).toBe("2:26");
+    for (const button of [
+      ...within(modeRow()).getAllByRole("button"),
+      ...presetOptions(),
+    ]) {
+      expect(button.getAttribute("aria-disabled")).toBe("true");
+    }
   });
 
-  it("starts the round on release, not on press down", () => {
+  it("clears the notice and restores the lock hint", () => {
+    render(<App />);
+    pressMainShort();
+
+    selectMode("DRILLS");
+    advance(0);
+    expect(messageText()).toBe("Hold green to reset before changing.");
+
+    advance(NOTICE_MS);
+
+    expect(messageText()).toBe("Selection locked — hold green to reset");
+  });
+
+  it("does not repeat the notice while a white hold remains down", () => {
+    render(<App />);
+    pressMainShort();
+
+    fireEvent.pointerDown(modeButton());
+    advance(MODE_BUTTON_HOLD_MS);
+    advance(0);
+    expect(messageText()).toBe("Hold green to reset before changing.");
+
+    advance(NOTICE_MS);
+    expect(messageText()).toBe("Selection locked — hold green to reset");
+
+    // Still holding: no new blocked attempt should be generated.
+    advance(5 * MODE_BUTTON_HOLD_MS);
+    expect(messageText()).toBe("Selection locked — hold green to reset");
+
+    fireEvent.pointerUp(modeButton());
+    expect(modeContextText()).toBe("ROLLS");
+  });
+
+  it("does not queue a refused change for after reset", () => {
+    render(<App />);
+    pressMainShort();
+    selectMode("DRILLS");
+    selectPreset(1);
+
+    pressMainLong();
+
+    expect(modeContextText()).toBe("ROLLS");
+    expect(clockText()).toBe("5:00");
+    expect(activePreset().textContent?.trim()).toBe("WORK 5:00 / REST 1:00");
+  });
+});
+
+describe("abandoning and guarding presses", () => {
+  it("fires no Main action when the pointer leaves mid-hold", () => {
     render(<App />);
     const main = mainButton();
 
-    // Held for 599 ms, then released: still a short press, so it starts.
     fireEvent.pointerDown(main);
-    advance(MAIN_BUTTON_HOLD_MS - 1);
+    advance(MAIN_BUTTON_HOLD_MS / 2);
+    fireEvent.pointerOut(main);
+    advance(10 * MAIN_BUTTON_HOLD_MS);
     fireEvent.pointerUp(main);
 
-    expect(mainLabelText()).toBe("Pause");
-    // The short action fires on release, so the round begins at the release and
-    // none of the 599 ms held is billed to the round.
+    expect(mainLabelText()).toBe("Start");
     expect(clockText()).toBe("5:00");
+  });
 
-    advance(1 * SECOND);
+  it("fires no Mode action when the window loses focus mid-hold", () => {
+    render(<App />);
+    const mode = modeButton();
 
-    expect(clockText()).toBe("4:59");
+    fireEvent.pointerDown(mode);
+    advance(MODE_BUTTON_HOLD_MS / 2);
+    blurWindow();
+    advance(10 * MODE_BUTTON_HOLD_MS);
+    fireEvent.pointerUp(mode);
+
+    expect(modeContextText()).toBe("ROLLS");
+    expect(clockText()).toBe("5:00");
+  });
+
+  it("leaves no pending action when unmounted mid-hold", () => {
+    const { unmount } = render(<App />);
+
+    fireEvent.pointerDown(mainButton());
+    advance(MAIN_BUTTON_HOLD_MS / 2);
+
+    unmount();
+
+    expect(vi.getTimerCount()).toBe(0);
+    advance(10 * MAIN_BUTTON_HOLD_MS);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("registers exactly one ticking loop under StrictMode", () => {
-    // StrictMode double-invokes effects on mount, so a loop started during mount
-    // (or during render) would be registered twice. The count assertion is what
-    // makes that visible: the display cannot show the difference, because the
-    // remaining time is recomputed from the clock rather than accumulated, so a
-    // leaked second loop still reads the same.
     render(
       <StrictMode>
         <App />
@@ -181,580 +750,19 @@ describe("a running round", () => {
     expect(clockText()).toBe("4:58");
     expect(vi.getTimerCount()).toBe(1);
   });
-});
 
-describe("the end of the round", () => {
-  it("clamps at 0:00 instead of counting into negative time", () => {
-    render(<App />);
-    pressMainShort();
-
-    advance(5 * MINUTE + 10 * SECOND);
-
-    expect(clockText()).toBe("0:00");
-  });
-
-  it("stops its loop once the round is over", () => {
-    render(<App />);
-    pressMainShort();
-
-    advance(5 * MINUTE);
-
-    expect(vi.getTimerCount()).toBe(0);
-  });
-});
-
-describe("resetting", () => {
-  it("returns the display to a full five minutes", () => {
-    render(<App />);
-    pressMainShort();
-    advance(1 * MINUTE);
-
-    pressMainLong();
-
-    expect(clockText()).toBe("5:00");
-  });
-
-  it("cancels the countdown that was already running", () => {
-    render(<App />);
-    pressMainShort();
-    advance(1 * MINUTE);
-
-    pressMainLong();
-
-    expect(vi.getTimerCount()).toBe(0);
-  });
-
-  it("resets from RUNNING, keeping the selected mode", () => {
-    render(<App />);
-    pressModeLong();
-    pressMainShort();
-    advance(2 * MINUTE);
-
-    pressMainLong();
-
-    expect(mainLabelText()).toBe("Start");
-    expect(clockText()).toBe("5:00");
-    expect(modeText()).toBe("Mode 2");
-  });
-
-  it("resets from PAUSED", () => {
-    render(<App />);
-    pressMainShort();
-    advance(1 * MINUTE);
-    pressMainShort();
-    expect(mainLabelText()).toBe("Resume");
-
-    pressMainLong();
-
-    expect(mainLabelText()).toBe("Start");
-    expect(clockText()).toBe("5:00");
-  });
-
-  it("resets from FINISHED", () => {
-    render(<App />);
-    pressMainShort();
-    advance(5 * MINUTE);
-    expect(mainLabelText()).toBe("Reset");
-
-    pressMainLong();
-
-    expect(mainLabelText()).toBe("Start");
-    expect(clockText()).toBe("5:00");
-  });
-});
-
-describe("unmounting mid-round", () => {
-  it("leaves no ticking loop behind", () => {
+  it("leaves no ticking loop behind after reset or unmount", () => {
     const { unmount } = render(<App />);
     pressMainShort();
     advance(1 * SECOND);
-
-    // Proves a loop really was running, so the assertion below means something.
     expect(vi.getTimerCount()).toBeGreaterThan(0);
 
+    pressMainLong();
+    expect(vi.getTimerCount()).toBe(0);
+
+    pressMainShort();
+    advance(1 * SECOND);
     unmount();
-
     expect(vi.getTimerCount()).toBe(0);
-  });
-});
-
-describe("the Main button label", () => {
-  it("names the next short-press action in every state", () => {
-    render(<App />);
-
-    expect(mainLabelText()).toBe("Start");
-
-    pressMainShort();
-    expect(mainLabelText()).toBe("Pause");
-
-    pressMainShort();
-    expect(mainLabelText()).toBe("Resume");
-
-    pressMainShort();
-    expect(mainLabelText()).toBe("Pause");
-  });
-
-  it("stays enabled while a round is running, so a long hold still works", () => {
-    render(<App />);
-    pressMainShort();
-
-    // Not `disabled`, and not marked unavailable either: Main must keep working
-    // for a long hold even though its short action has changed meaning.
-    const main = mainButton() as HTMLButtonElement;
-    expect(main.disabled).toBe(false);
-    expect(main.getAttribute("aria-disabled")).toBeNull();
-
-    pressMainLong();
-
-    expect(mainLabelText()).toBe("Start");
-  });
-});
-
-describe("pause and resume", () => {
-  it("freezes the clock while paused", () => {
-    render(<App />);
-    pressMainShort();
-    advance(1 * MINUTE);
-    pressMainShort();
-
-    advance(10 * MINUTE);
-
-    expect(clockText()).toBe("4:00");
-  });
-
-  it("resumes from the frozen time instead of restarting the round", () => {
-    render(<App />);
-    pressMainShort();
-    advance(1 * MINUTE);
-    pressMainShort();
-    advance(10 * MINUTE);
-
-    pressMainShort();
-
-    expect(clockText()).toBe("4:00");
-
-    advance(1 * SECOND);
-
-    expect(clockText()).toBe("3:59");
-  });
-
-  it("does not reset the session on a paused short press", () => {
-    render(<App />);
-    pressMainShort();
-    advance(1 * MINUTE);
-    pressMainShort();
-    advance(10 * MINUTE);
-
-    expect(mainLabelText()).toBe("Resume");
-    pressMainShort();
-
-    expect(mainLabelText()).toBe("Pause");
-    expect(clockText()).toBe("4:00");
-    expect(vi.getTimerCount()).toBe(1);
-  });
-});
-
-describe("holding Main to reset", () => {
-  it("waits for 1,500 ms before resetting", () => {
-    render(<App />);
-    pressMainShort();
-    advance(1 * MINUTE);
-
-    fireEvent.pointerDown(mainButton());
-    advance(MAIN_BUTTON_HOLD_MS - 1);
-    expect(clockText()).toBe("3:59");
-
-    advance(1);
-    expect(clockText()).toBe("5:00");
-
-    fireEvent.pointerUp(mainButton());
-    expect(mainLabelText()).toBe("Start");
-  });
-
-  it("does not start from READY when a hold is released", () => {
-    render(<App />);
-
-    fireEvent.pointerDown(mainButton());
-    advance(MAIN_BUTTON_HOLD_MS);
-    fireEvent.pointerUp(mainButton());
-
-    expect(mainLabelText()).toBe("Start");
-    expect(clockText()).toBe("5:00");
-    expect(vi.getTimerCount()).toBe(0);
-  });
-});
-
-describe("one press, one action", () => {
-  it("does not also fire a short action when a long press is released", () => {
-    render(<App />);
-
-    pressMainLong();
-
-    // A reset happened. If the release had also fired a short press, the app
-    // would have started a round instead and read "Pause".
-    expect(mainLabelText()).toBe("Start");
-    expect(clockText()).toBe("5:00");
-  });
-
-  it("ignores the click a real mouse emits after a pointer press", () => {
-    render(<App />);
-    const main = mainButton();
-
-    fireEvent.pointerDown(main);
-    fireEvent.pointerUp(main);
-    // Browsers fire click after pointerup, with a non-zero click count.
-    fireEvent.click(main, { detail: 1 });
-
-    // One short press: READY -> RUNNING. A duplicate would have paused it.
-    expect(mainLabelText()).toBe("Pause");
-  });
-
-  it("fires exactly one short action from keyboard activation", () => {
-    render(<App />);
-
-    // Keyboard-activated clicks report detail === 0.
-    fireEvent.click(mainButton(), { detail: 0 });
-    expect(mainLabelText()).toBe("Pause");
-
-    fireEvent.click(mainButton(), { detail: 0 });
-    expect(mainLabelText()).toBe("Resume");
-
-    fireEvent.click(mainButton(), { detail: 0 });
-    expect(mainLabelText()).toBe("Pause");
-  });
-
-  it("does not fire the long action for a keypress, however long it is held", () => {
-    render(<App />);
-
-    fireEvent.click(mainButton(), { detail: 0 });
-    advance(10 * MAIN_BUTTON_HOLD_MS);
-
-    expect(mainLabelText()).toBe("Pause");
-  });
-});
-
-describe("abandoning a press", () => {
-  it("fires nothing when the pointer leaves the button mid-hold", () => {
-    render(<App />);
-    const main = mainButton();
-
-    fireEvent.pointerDown(main);
-    advance(MAIN_BUTTON_HOLD_MS / 2);
-    // React derives pointerleave from pointerout, so that is what a browser
-    // moving the cursor off the button produces.
-    fireEvent.pointerOut(main);
-    advance(10 * MAIN_BUTTON_HOLD_MS);
-    fireEvent.pointerUp(main);
-
-    expect(mainLabelText()).toBe("Start");
-    expect(clockText()).toBe("5:00");
-  });
-
-  it("fires nothing when the pointer is cancelled mid-hold", () => {
-    render(<App />);
-    const main = mainButton();
-
-    fireEvent.pointerDown(main);
-    advance(MAIN_BUTTON_HOLD_MS / 2);
-    fireEvent.pointerCancel(main);
-    advance(10 * MAIN_BUTTON_HOLD_MS);
-    fireEvent.pointerUp(main);
-
-    expect(mainLabelText()).toBe("Start");
-    expect(clockText()).toBe("5:00");
-  });
-
-  it("fires nothing when the window loses focus mid-hold", () => {
-    render(<App />);
-    const main = mainButton();
-
-    fireEvent.pointerDown(main);
-    advance(MAIN_BUTTON_HOLD_MS / 2);
-    blurWindow();
-    advance(10 * MAIN_BUTTON_HOLD_MS);
-    fireEvent.pointerUp(main);
-
-    expect(mainLabelText()).toBe("Start");
-    expect(clockText()).toBe("5:00");
-  });
-
-  it("leaves no pending action when unmounted mid-hold", () => {
-    const { unmount } = render(<App />);
-
-    fireEvent.pointerDown(mainButton());
-    advance(MAIN_BUTTON_HOLD_MS / 2);
-
-    unmount();
-
-    // Without cancelling on unmount, the pending hold would still be scheduled.
-    expect(vi.getTimerCount()).toBe(0);
-
-    advance(10 * MAIN_BUTTON_HOLD_MS);
-
-    expect(vi.getTimerCount()).toBe(0);
-  });
-});
-
-describe("the Mode button", () => {
-  it("starts on mode 1", () => {
-    render(<App />);
-
-    expect(modeText()).toBe("Mode 1");
-  });
-
-  it("cycles the main modes 1 -> 2 -> 3 -> 4 -> 5 -> 1 on a hold", () => {
-    render(<App />);
-
-    const seen = [modeText()];
-
-    for (let press = 0; press < 5; press += 1) {
-      pressModeLong();
-      seen.push(modeText());
-    }
-
-    expect(seen).toEqual([
-      "Mode 1",
-      "Mode 2",
-      "Mode 3",
-      "Mode 4",
-      "Mode 5",
-      "Mode 1",
-    ]);
-  });
-
-  it("does nothing on a short press in mode 1, which has no options", () => {
-    render(<App />);
-
-    pressModeShort();
-
-    expect(modeText()).toBe("Mode 1");
-  });
-
-  it("cycles the options within a mode on a short press, wrapping", () => {
-    render(<App />);
-
-    // A hold reaches mode 2, whose options are 2, 2b, 2c.
-    pressModeLong();
-    expect(modeText()).toBe("Mode 2");
-
-    pressModeShort();
-    expect(modeText()).toBe("Mode 2b");
-
-    pressModeShort();
-    expect(modeText()).toBe("Mode 2c");
-
-    pressModeShort();
-    expect(modeText()).toBe("Mode 2");
-  });
-
-  it("switches modes at 800 ms, the same threshold as the white button", () => {
-    render(<App />);
-
-    fireEvent.pointerDown(modeButton());
-    advance(MODE_BUTTON_HOLD_MS - 1);
-    expect(modeText()).toBe("Mode 1");
-
-    advance(1);
-    expect(modeText()).toBe("Mode 2");
-
-    // Releasing after the hold must not also cycle the option.
-    fireEvent.pointerUp(modeButton());
-    expect(modeText()).toBe("Mode 2");
-  });
-
-  it("returns to the base selection when the main mode changes", () => {
-    render(<App />);
-    pressModeLong();
-    pressModeShort();
-    expect(modeText()).toBe("Mode 2b");
-
-    pressModeLong();
-
-    expect(modeText()).toBe("Mode 3");
-  });
-
-  it("marks modes 2-5 as placeholders and mode 1 as the real round", () => {
-    render(<App />);
-
-    expect(screen.queryByText(/placeholder/i)).toBeNull();
-
-    pressModeLong();
-
-    expect(screen.getByText(/placeholder/i)).toBeTruthy();
-    expect(modeText()).toBe("Mode 2");
-  });
-
-  it("is ignored while a round is running", () => {
-    render(<App />);
-    pressMainShort();
-
-    pressModeShort();
-    pressModeShort();
-    pressModeLong();
-
-    expect(modeText()).toBe("Mode 1");
-  });
-
-  it("is ignored while a round is paused", () => {
-    render(<App />);
-    pressMainShort();
-    pressMainShort();
-
-    pressModeShort();
-    pressModeLong();
-
-    expect(modeText()).toBe("Mode 1");
-  });
-
-  it("is usable again once the round is over", () => {
-    render(<App />);
-    pressMainShort();
-    advance(5 * MINUTE);
-
-    pressModeLong();
-
-    expect(modeText()).toBe("Mode 2");
-  });
-});
-
-describe("the round reference", () => {
-  it("shows the configured round length beside the countdown", () => {
-    render(<App />);
-
-    expect(durationText()).toBe("Round: 5:00");
-    expect(clockText()).toBe("5:00");
-  });
-
-  it("stays fixed while running, paused and finished", () => {
-    render(<App />);
-
-    pressMainShort();
-    advance(2 * MINUTE);
-    expect(clockText()).toBe("3:00");
-    expect(durationText()).toBe("Round: 5:00");
-
-    pressMainShort();
-    advance(10 * MINUTE);
-    expect(mainLabelText()).toBe("Resume");
-    expect(clockText()).toBe("3:00");
-    expect(durationText()).toBe("Round: 5:00");
-
-    pressMainShort();
-    expect(mainLabelText()).toBe("Pause");
-    expect(clockText()).toBe("3:00");
-    advance(1 * SECOND);
-    expect(clockText()).toBe("2:59");
-    expect(durationText()).toBe("Round: 5:00");
-
-    pressMainLong();
-    expect(mainLabelText()).toBe("Start");
-    expect(clockText()).toBe("5:00");
-    expect(durationText()).toBe("Round: 5:00");
-  });
-
-  it("tracks the selected mode's own duration", () => {
-    render(<App />);
-
-    // Every placeholder mode currently shares five minutes, so the text cannot
-    // differ between modes yet. What this pins is that the reference still reads
-    // the configured length once the selection has moved.
-    pressModeLong();
-    pressModeLong();
-    pressModeLong();
-
-    expect(modeText()).toBe("Mode 4");
-    expect(durationText()).toBe("Round: 5:00");
-  });
-
-  it("keeps the reference out of the timer element, which speaks only the countdown", () => {
-    render(<App />);
-
-    expect(screen.getByRole("timer").textContent).toBe("5:00");
-    expect(durationText()).toBe("Round: 5:00");
-  });
-});
-
-describe("the button hints", () => {
-  it("explains the long press for both buttons", () => {
-    render(<App />);
-
-    expect(screen.getByText("Hold to reset")).toBeTruthy();
-    expect(screen.getByText("Hold for mode")).toBeTruthy();
-  });
-
-  it("associates each hint with its button for assistive technology", () => {
-    render(<App />);
-
-    expect(mainButton().getAttribute("aria-describedby")).toBe("main-hint");
-    expect(modeButton().getAttribute("aria-describedby")).toBe("mode-hint");
-  });
-
-  it("stops promising Mode will work while a round is running", () => {
-    render(<App />);
-    pressMainShort();
-
-    expect(screen.queryByText("Hold for mode")).toBeNull();
-    expect(screen.getByText("Unavailable until the round ends")).toBeTruthy();
-    // Main's own hint is unaffected.
-    expect(screen.getByText("Hold to reset")).toBeTruthy();
-  });
-
-  it("stops promising Mode will work while a round is paused", () => {
-    render(<App />);
-    pressMainShort();
-    pressMainShort();
-
-    expect(screen.queryByText("Hold for mode")).toBeNull();
-    expect(screen.getByText("Unavailable until the round ends")).toBeTruthy();
-  });
-
-  it("promises Mode again once the round is over", () => {
-    render(<App />);
-    pressMainShort();
-    advance(5 * MINUTE);
-
-    expect(screen.getByText("Hold for mode")).toBeTruthy();
-    expect(screen.queryByText("Unavailable until the round ends")).toBeNull();
-  });
-
-  it("keeps the hint out of the button's own name", () => {
-    render(<App />);
-
-    expect(screen.getByText("Hold to reset")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Start" })).toBe(mainButton());
-  });
-});
-
-describe("the placeholder note", () => {
-  it("does not repeat the countdown and does not move as the clock runs", () => {
-    render(<App />);
-    pressModeLong();
-
-    const note = screen.getByText(/placeholder/i).textContent ?? "";
-
-    // The configured duration is reported once, by the round reference.
-    expect(note).not.toMatch(/\d+:\d\d/);
-
-    pressMainShort();
-    advance(2 * MINUTE);
-
-    expect(screen.getByText(/placeholder/i).textContent).toBe(note);
-  });
-});
-
-describe("the clock at the end of a round", () => {
-  it("shows 0:01 with a second to go and reaches 0:00 only at the deadline", () => {
-    render(<App />);
-    pressMainShort();
-
-    advance(4 * MINUTE + 59 * SECOND);
-
-    expect(clockText()).toBe("0:01");
-    expect(mainLabelText()).toBe("Pause");
-
-    advance(1 * SECOND);
-
-    expect(clockText()).toBe("0:00");
-    expect(mainLabelText()).toBe("Reset");
   });
 });

@@ -1,5 +1,6 @@
 /**
- * Round state machine: the agreed operator behaviour, as pure functions.
+ * Session state machine: the two real training modes, their work/rest cycles,
+ * and the two-button selection rules, as pure functions.
  *
  * No React, no DOM, no timers of its own. Every transition is a plain
  * `(state, action) => state`, so the whole interaction can be tested by calling
@@ -9,134 +10,159 @@
  * stays timestamp-derived: nothing here accumulates a decreasing total.
  */
 
-import { ROUND_MS, remainingMs } from "./timer";
+import { remainingMs } from "./timer";
+import {
+  DEFAULT_PRESET_INDEX,
+  TRAINING_MODES,
+  modeAt,
+  presetAt,
+  type Preset,
+  type TrainingMode,
+} from "./training";
 
-export type Phase = "ready" | "running" | "paused" | "finished";
-
-/**
- * Selection lists, indexed by top-level mode.
- *
- * The FIRST entry of each list is that mode's base selection and doubles as the
- * mode's top-level display label. Mode short press cycles between lists; mode
- * long press cycles within one. Base selections display as a bare number
- * ("2"), not "2a", so the two agreed lists stay as written.
- *
- * ONLY MODE 1 IS REAL — the implemented five minute single round.
- * Modes 2-5 are DISPLAY/INTERACTION PLACEHOLDERS. Their labels exist so the
- * two-button interaction can be built and tested. They carry no gym meaning and
- * no durations of their own; see roundDurationMs.
- */
-export const MODE_SELECTIONS: readonly (readonly string[])[] = [
-  ["1"],
-  ["2", "2b", "2c"],
-  ["3", "3b"],
-  ["4", "4b", "4c"],
-  ["5", "5a", "5b"],
-];
-
-const REAL_MODE_INDEX = 0;
+export type TimerStatus = "ready" | "running" | "paused";
+export type CyclePhase = "work" | "rest";
 
 export interface RoundState {
-  phase: Phase;
-  /** Which top-level mode is selected (index into MODE_SELECTIONS). */
+  /** Timer status, separate from the work/rest cycle phase. */
+  status: TimerStatus;
+  /** Which half of the repeating cycle is running. */
+  phase: CyclePhase;
+  /** Which main mode is selected (index into TRAINING_MODES). */
   modeIndex: number;
-  /** Which option within that mode is selected (index into its list). */
-  optionIndex: number;
-  /** Wall-clock time the round ends at; null when no round is in flight. */
+  /**
+   * The last preset selected in each mode. This is what makes mode changes
+   * restore a mode's remembered preset during the current app session.
+   */
+  presetIndexByMode: readonly number[];
+  /** Work-round number. Starts at 1, increments only when a work phase begins. */
+  round: number;
+  /** Wall-clock time the current phase ends at; null while ready. */
   deadline: number | null;
-  /** Wall-clock time the round was paused at; null unless paused. */
+  /** Wall-clock time the session was paused at; null unless paused. */
   pausedAt: number | null;
+  /**
+   * Increments whenever a live phase transition begins. The interface uses it
+   * to play one cue per render, even if a delayed tick crossed several phases.
+   */
+  transitionSeq: number;
+  /** The phase that just began, or null after reset/selection. */
+  lastTransition: CyclePhase | null;
+  /** Increments on each selection attempt that was refused while not ready. */
+  blockedSelectionSeq: number;
 }
 
 export type RoundAction =
   /**
    * Main short press, at the clock reading `now`.
    *
-   * `fromPhase` is set by input that tracks a press across time (the physical
-   * green button). If the timer has moved to another phase by the time the
-   * action is reduced, the action is ignored rather than reinterpreted.
+   * `fromState` is set by the physical green button, which tracks a press across
+   * time. If the session has moved on by the time the action is reduced, the
+   * action is ignored rather than reinterpreted.
    */
-  | { type: "mainShort"; now: number; fromPhase?: string }
-  /** Main long press, at the clock reading `now`. */
+  | { type: "mainShort"; now: number; fromState?: string }
+  /** Main long press: full-session reset, retaining mode and preset. */
   | { type: "mainLong"; now: number }
-  | { type: "modeShort" }
-  | { type: "modeLong" }
+  /** White short press: next preset within the current mode. */
+  | { type: "nextPreset" }
+  /** White hold: next main mode. */
+  | { type: "nextMode" }
+  /** Direct selector choice of a main mode. */
+  | { type: "selectMode"; modeIndex: number }
+  /** Direct selector choice of a preset in the current mode. */
+  | { type: "selectPreset"; presetIndex: number }
   /** The display ticked, at the clock reading `now`. */
   | { type: "tick"; now: number };
 
 export const initialRoundState: RoundState = {
-  phase: "ready",
-  modeIndex: REAL_MODE_INDEX,
-  optionIndex: 0,
+  status: "ready",
+  phase: "work",
+  modeIndex: 0,
+  presetIndexByMode: TRAINING_MODES.map(() => DEFAULT_PRESET_INDEX),
+  round: 1,
   deadline: null,
   pausedAt: null,
+  transitionSeq: 0,
+  lastTransition: null,
+  blockedSelectionSeq: 0,
 };
 
+export function currentMode(state: RoundState): TrainingMode {
+  return modeAt(state.modeIndex);
+}
+
+export function currentPresetIndex(state: RoundState): number {
+  return state.presetIndexByMode[state.modeIndex] ?? DEFAULT_PRESET_INDEX;
+}
+
+export function currentPreset(state: RoundState): Preset {
+  return presetAt(state.modeIndex, currentPresetIndex(state));
+}
+
+export function currentWorkMs(state: RoundState): number {
+  return currentPreset(state).workMs;
+}
+
+export function currentRestMs(state: RoundState): number {
+  return currentPreset(state).restMs;
+}
+
+/** Selection changes are allowed only before a session starts. */
+export function selectionAllowed(state: RoundState): boolean {
+  return state.status === "ready";
+}
+
 /**
- * Round length per mode.
- *
- * Modes 2-5 are placeholders and deliberately reuse the same five minutes, so
- * every entry currently holds ROUND_MS. Real preset durations are NOT invented
- * here — defining a real preset means giving its mode a duration in this list.
+ * A token for the part of the session a tracked button press depends on. If it
+ * changes while the green button is held, the press is abandoned.
  */
-const MODE_DURATIONS_MS: readonly number[] = MODE_SELECTIONS.map(
-  () => ROUND_MS,
-);
-
-export function roundDurationMs(modeIndex: number): number {
-  return MODE_DURATIONS_MS[modeIndex] ?? ROUND_MS;
+export function stateKey(state: RoundState): string {
+  return `${state.status}:${state.phase}:${state.round}`;
 }
 
-/** The full placeholder label for the current selection, e.g. "2b" or "4". */
-export function selectionLabel(state: RoundState): string {
-  return MODE_SELECTIONS[state.modeIndex][state.optionIndex];
-}
-
-/** True for modes 2-5: selectable, shown, but not a real gym preset yet. */
-export function isPlaceholderMode(state: RoundState): boolean {
-  return state.modeIndex !== REAL_MODE_INDEX;
-}
-
-/**
- * The visible Main label, which always names the next short-press action.
- *
- * PAUSED resumes the frozen session; only a hold (or FINISHED's short press)
- * leads to a reset.
- */
+/** The visible Main label, which always names the next short-press action. */
 export function mainLabel(state: RoundState): string {
-  switch (state.phase) {
+  switch (state.status) {
     case "ready":
       return "Start";
     case "running":
       return "Pause";
     case "paused":
       return "Resume";
-    case "finished":
-      return "Reset";
   }
 }
 
-/**
- * Whether Mode may change the selection. Only while no round is in flight, so a
- * preset cannot change mid-round. The button stays visible either way; it is the
- * reducer, not a disabled attribute, that guarantees this.
- */
-export function modeIsActive(state: RoundState): boolean {
-  return state.phase === "ready" || state.phase === "finished";
+/** ROLL / DRILL during work, REST for either mode's rest phase. */
+export function phaseLabel(state: RoundState): string {
+  return state.phase === "rest" ? "REST" : currentMode(state).workLabel;
+}
+
+/** What follows the current (or, while ready, the first) phase. */
+export interface PhasePreview {
+  readonly label: string;
+  readonly ms: number;
+}
+
+export function nextPhase(state: RoundState): PhasePreview {
+  const mode = currentMode(state);
+
+  if (state.status === "ready" || state.phase === "rest") {
+    return { label: mode.workLabel, ms: currentWorkMs(state) };
+  }
+
+  return { label: "REST", ms: currentRestMs(state) };
 }
 
 /**
  * What the clock shows, given the current wall-clock reading.
  *
- * - ready: a full round for the selected mode
- * - running: derived from the deadline
- * - paused: derived from the *timestamp the round was paused at*, so the value
- *   is frozen without ever storing a countdown total
- * - finished: clamps to 0:00
+ * - ready: the selected preset's full work duration
+ * - running: derived from the current phase deadline
+ * - paused: derived from the timestamp the session was paused at
  */
 export function displayMs(state: RoundState, now: number): number {
   if (state.deadline === null) {
-    return roundDurationMs(state.modeIndex);
+    return currentWorkMs(state);
   }
 
   return remainingMs(state.deadline, state.pausedAt ?? now);
@@ -145,33 +171,36 @@ export function displayMs(state: RoundState, now: number): number {
 export function reduce(state: RoundState, action: RoundAction): RoundState {
   switch (action.type) {
     case "mainShort":
-      return onMainShort(state, action.now, action.fromPhase);
+      return onMainShort(state, action.now, action.fromState);
 
     case "mainLong":
-      // Reset from ANY state, including RUNNING and PAUSED. The selected mode
-      // and option are deliberately preserved; only the round is restored.
       return resetSession(state);
 
-    case "modeShort":
-      // Landing on a new top-level mode starts at that mode's base selection.
-      return modeIsActive(state)
-        ? {
-            ...state,
-            modeIndex: wrap(state.modeIndex + 1, MODE_SELECTIONS.length),
-            optionIndex: 0,
-          }
-        : state;
-
-    case "modeLong":
-      return modeIsActive(state)
-        ? {
-            ...state,
-            optionIndex: wrap(
-              state.optionIndex + 1,
-              MODE_SELECTIONS[state.modeIndex].length,
+    case "nextPreset":
+      return selectionAllowed(state)
+        ? selectPresetAt(
+            state,
+            wrap(
+              currentPresetIndex(state) + 1,
+              currentMode(state).presets.length,
             ),
-          }
-        : state;
+          )
+        : blockedSelection(state);
+
+    case "nextMode":
+      return selectionAllowed(state)
+        ? selectModeAt(state, wrap(state.modeIndex + 1, TRAINING_MODES.length))
+        : blockedSelection(state);
+
+    case "selectMode":
+      return selectionAllowed(state)
+        ? selectModeAt(state, action.modeIndex)
+        : blockedSelection(state);
+
+    case "selectPreset":
+      return selectionAllowed(state)
+        ? selectPresetAt(state, action.presetIndex)
+        : blockedSelection(state);
 
     case "tick":
       return onTick(state, action.now);
@@ -181,39 +210,39 @@ export function reduce(state: RoundState, action: RoundAction): RoundState {
 function onMainShort(
   state: RoundState,
   now: number,
-  fromPhase?: string,
+  fromState?: string,
 ): RoundState {
-  // A tracked press that began in another phase is stale: the timer changed
-  // underneath it, so it must not be reinterpreted for the new state.
-  if (fromPhase !== undefined && fromPhase !== state.phase) {
+  // A tracked press that began in another session state is stale: the timer
+  // changed underneath it, so it must not be reinterpreted for the new state.
+  if (fromState !== undefined && fromState !== stateKey(state)) {
     return state;
   }
 
-  switch (state.phase) {
+  switch (state.status) {
     case "ready":
       return {
         ...state,
-        phase: "running",
-        deadline: now + roundDurationMs(state.modeIndex),
+        status: "running",
+        phase: "work",
+        round: 1,
+        deadline: now + currentWorkMs(state),
         pausedAt: null,
+        transitionSeq: state.transitionSeq + 1,
+        lastTransition: "work",
       };
 
     case "running":
-      // Freeze the remainder by remembering WHEN we paused, not how much is left.
-      return { ...state, phase: "paused", pausedAt: now };
+      // Freeze the current phase by remembering WHEN we paused.
+      return { ...state, status: "paused", pausedAt: now };
 
     case "paused":
-      // Resume builds a NEW deadline from the frozen remainder, so the session
-      // continues where it stopped instead of restarting a full round.
+      // Resume from the frozen remainder, keeping the phase and round.
       return {
         ...state,
-        phase: "running",
+        status: "running",
         deadline: now + frozenRemaining(state),
         pausedAt: null,
       };
-
-    case "finished":
-      return resetSession(state);
   }
 }
 
@@ -227,16 +256,86 @@ function frozenRemaining(state: RoundState): number {
 }
 
 /**
- * Restore the session to its initial READY state while keeping the operator's
- * mode and option selection. There is no stored countdown to unwind: dropping
- * the deadline is what restores the full configured round.
+ * Restore the session to READY at round 1 and the selected preset's full work
+ * duration. Mode and per-mode preset memory are deliberately preserved.
  */
 function resetSession(state: RoundState): RoundState {
-  return { ...state, phase: "ready", deadline: null, pausedAt: null };
+  return {
+    ...state,
+    status: "ready",
+    phase: "work",
+    round: 1,
+    deadline: null,
+    pausedAt: null,
+    lastTransition: null,
+  };
+}
+
+/**
+ * Load a ready-state selection. The work phase begins at round 1 with the full
+ * selected work duration; nothing is started automatically.
+ */
+function readySelection(
+  state: RoundState,
+  modeIndex: number,
+  presetIndexByMode: readonly number[],
+): RoundState {
+  return {
+    ...state,
+    status: "ready",
+    phase: "work",
+    modeIndex,
+    presetIndexByMode,
+    round: 1,
+    deadline: null,
+    pausedAt: null,
+    lastTransition: null,
+  };
+}
+
+function selectModeAt(state: RoundState, modeIndex: number): RoundState {
+  if (
+    !Number.isInteger(modeIndex) ||
+    modeIndex < 0 ||
+    modeIndex >= TRAINING_MODES.length ||
+    modeIndex === state.modeIndex
+  ) {
+    return state;
+  }
+
+  return readySelection(state, modeIndex, state.presetIndexByMode);
+}
+
+function selectPresetAt(state: RoundState, presetIndex: number): RoundState {
+  const mode = currentMode(state);
+
+  if (
+    !Number.isInteger(presetIndex) ||
+    presetIndex < 0 ||
+    presetIndex >= mode.presets.length ||
+    presetIndex === currentPresetIndex(state)
+  ) {
+    return state;
+  }
+
+  const presetIndexByMode = state.presetIndexByMode.map((value, index) =>
+    index === state.modeIndex ? presetIndex : value,
+  );
+
+  return readySelection(state, state.modeIndex, presetIndexByMode);
+}
+
+function blockedSelection(state: RoundState): RoundState {
+  // The attempt is acknowledged by the interface, but nothing is queued and the
+  // session is untouched.
+  return {
+    ...state,
+    blockedSelectionSeq: state.blockedSelectionSeq + 1,
+  };
 }
 
 function onTick(state: RoundState, now: number): RoundState {
-  if (state.phase !== "running" || state.deadline === null) {
+  if (state.status !== "running" || state.deadline === null) {
     return state;
   }
 
@@ -244,7 +343,41 @@ function onTick(state: RoundState, now: number): RoundState {
     return state;
   }
 
-  return { ...state, phase: "finished", pausedAt: null };
+  /*
+   * Consume every phase boundary up to `now`, not just one. Deadlines advance by
+   * the configured duration from the previous deadline, so a late callback
+   * cannot make the cycle drift; a callback that skipped several phases lands
+   * on the correct current phase and round.
+   */
+  let phase = state.phase;
+  let round = state.round;
+  let deadline = state.deadline;
+  let transitionSeq = state.transitionSeq;
+  let lastTransition = state.lastTransition;
+
+  while (now >= deadline) {
+    if (phase === "work") {
+      phase = "rest";
+      deadline += currentRestMs(state);
+      lastTransition = "rest";
+    } else {
+      phase = "work";
+      round += 1;
+      deadline += currentWorkMs(state);
+      lastTransition = "work";
+    }
+
+    transitionSeq += 1;
+  }
+
+  return {
+    ...state,
+    phase,
+    round,
+    deadline,
+    transitionSeq,
+    lastTransition,
+  };
 }
 
 function wrap(index: number, length: number): number {

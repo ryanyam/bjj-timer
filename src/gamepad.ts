@@ -9,7 +9,7 @@
  * Mapping, as agreed for the two-button arcade panel:
  * - button 0 (green, MAIN): short press on release starts, pauses or resumes;
  *   holding to MAIN_BUTTON_HOLD_MS resets the session once, while held.
- * - button 1 (white, MODE/OPTION): short press on release cycles the option;
+ * - button 1 (white, MODE/OPTION): short press on release cycles the preset;
  *   holding to MODE_BUTTON_HOLD_MS cycles the main mode once, while held.
  */
 
@@ -21,7 +21,7 @@ export const MAIN_BUTTON_HOLD_MS = 1_500;
 
 /**
  * How long the white button must be held to switch MAIN MODE instead of
- * cycling the current mode's option. Change this one number to retune it.
+ * cycling the current mode's preset. Change this one number to retune it.
  */
 export const MODE_BUTTON_HOLD_MS = 800;
 
@@ -58,8 +58,6 @@ export type GamepadGesture =
   | { kind: "mode" };
 
 export interface GamepadUpdate {
-  /** False while a mode or option change is not allowed (round in flight). */
-  selectionEnabled?: boolean;
   /** Identifies the current timer state, used to cancel stale presses. */
   stateKey?: string;
   /**
@@ -164,7 +162,7 @@ export function createGamepadRecogniser({
         return IDLE_FEEDBACK;
       }
 
-      const { selectionEnabled = true, stateKey = "" } = update;
+      const { stateKey = "" } = update;
       const mainPressed = isPressed(buttons, MAIN_BUTTON_INDEX);
       const modePressed = isPressed(buttons, MODE_BUTTON_INDEX);
 
@@ -235,15 +233,13 @@ export function createGamepadRecogniser({
         mainArmed = true;
       }
 
-      if (!selectionEnabled) {
-        // Selection is unavailable right now. Drop the white button's state
-        // rather than merely ignoring the action: a gesture begun during a
-        // round must not complete after the round ends, and a button still
-        // held when selection returns must be released first.
-        modeArmed = false;
-        modeDownSince = null;
-        modeHoldFired = false;
-      } else if (modePressed) {
+      /*
+       * White: short press on release, hold once at the threshold. The reducer
+       * decides whether selection is currently allowed (READY only): while
+       * running or paused it records a blocked attempt for the interface to
+       * acknowledge, without changing the session.
+       */
+      if (modePressed) {
         if (modeArmed) {
           if (modeDownSince === null) {
             modeDownSince = now;

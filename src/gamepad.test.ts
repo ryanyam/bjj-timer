@@ -447,65 +447,6 @@ describe("the white button: hold", () => {
   });
 });
 
-describe("selection unavailable", () => {
-  it("keeps the green button working", () => {
-    const { kinds, feed } = setup();
-
-    feed(false, false, 0, { selectionEnabled: false });
-    feed(true, false, 16, { selectionEnabled: false });
-    feed(false, false, 32, { selectionEnabled: false });
-
-    expect(kinds()).toEqual(["mainShort"]);
-  });
-
-  it("ignores the white button entirely", () => {
-    const { gestures, feed } = setup();
-
-    feed(false, false, 0, { selectionEnabled: false });
-    feed(false, true, 100, { selectionEnabled: false });
-    feed(false, true, 100 + MODE_HOLD, { selectionEnabled: false });
-    feed(false, false, 100 + MODE_HOLD + 16, { selectionEnabled: false });
-
-    expect(gestures).toEqual([]);
-  });
-
-  it("drops a white press that began while selection was allowed", () => {
-    const { gestures, feed } = setup();
-
-    feed(false, false, 0);
-    feed(false, true, 100);
-    // The round starts: selection becomes unavailable mid-press.
-    feed(false, true, 400, { selectionEnabled: false });
-    feed(false, true, 100 + MODE_HOLD, { selectionEnabled: false });
-    // Selection returns, and the button is released: still nothing fires.
-    feed(false, false, 100 + MODE_HOLD + 16);
-
-    expect(gestures).toEqual([]);
-
-    feed(false, true, 2_000);
-    feed(false, false, 2_050);
-
-    expect(gestures).toEqual([{ kind: "option" }]);
-  });
-
-  it("requires a release before accepting input when selection returns", () => {
-    const { gestures, feed } = setup();
-
-    feed(false, false, 0, { selectionEnabled: false });
-    feed(false, true, 100, { selectionEnabled: false });
-    feed(false, true, 500);
-    feed(false, true, 500 + MODE_HOLD);
-    feed(false, false, 500 + MODE_HOLD + 16);
-
-    expect(gestures).toEqual([]);
-
-    feed(false, true, 2_000);
-    feed(false, false, 2_050);
-
-    expect(gestures).toEqual([{ kind: "option" }]);
-  });
-});
-
 describe("cancelling a gesture", () => {
   it("drops an unfinished white press and waits for a release", () => {
     const { gestures, recogniser, feed } = setup();

@@ -5,7 +5,6 @@ import {
   type GamepadFeedback,
   type GamepadRecogniser,
 } from "./gamepad";
-import type { Phase } from "./round";
 
 export type GamepadStatus =
   | "connected"
@@ -14,16 +13,14 @@ export type GamepadStatus =
   | "unsupported";
 
 export interface GamepadInputOptions {
-  /** Short green press, with the phase the press began in. */
-  onMain: (fromPhase: string) => void;
+  /** Short green press, with the session state the press began in. */
+  onMain: (fromState: string) => void;
   /** Green button held to the reset threshold. */
   onMainHold: () => void;
   onOption: () => void;
   onMode: () => void;
-  /** False while a mode or option change is not allowed (round in flight). */
-  selectionEnabled: boolean;
-  /** The current timer phase, used to cancel a press that spans a state change. */
-  stateKey: Phase;
+  /** Identifies the current session state, used to cancel a stale press. */
+  stateKey: string;
 }
 
 export interface GamepadInput {
@@ -160,7 +157,7 @@ export function useGamepadInput(options: GamepadInputOptions): GamepadInput {
       }
 
       const pad = activeIndex === null ? null : pads[activeIndex];
-      const { selectionEnabled, stateKey } = latestOptions.current;
+      const { stateKey } = latestOptions.current;
 
       if (pad === null || pad === undefined) {
         publishFeedback(recogniser.update(null, time, { stateKey }));
@@ -171,7 +168,6 @@ export function useGamepadInput(options: GamepadInputOptions): GamepadInput {
 
         publishFeedback(
           recogniser.update(pad.buttons, time, {
-            selectionEnabled,
             stateKey,
             adoptInitialPress,
           }),

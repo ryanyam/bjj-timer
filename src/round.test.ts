@@ -1,24 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { ROUND_MS, formatRemaining } from "./timer";
 import {
-  MODE_SELECTIONS,
+  currentMode,
+  currentPreset,
+  currentPresetIndex,
+  currentRestMs,
+  currentWorkMs,
   displayMs,
   initialRoundState,
-  isPlaceholderMode,
   mainLabel,
-  modeIsActive,
+  nextPhase,
+  phaseLabel,
   reduce,
-  roundDurationMs,
-  selectionLabel,
+  selectionAllowed,
+  stateKey,
   type RoundAction,
   type RoundState,
 } from "./round";
 
 /**
- * Spec for src/round.ts — the agreed two-button behaviour, as pure transitions.
+ * Spec for src/round.ts — the Rolls/Drills repeating work-rest session.
  *
- * No DOM here: every test calls the reducer directly, so the interaction rules
- * are pinned independently of React and of the press timing.
+ * No DOM here: every test calls the reducer directly, so the cycle rules are
+ * pinned independently of React, the selector, and input timing.
  */
 
 const T0 = 1_700_000_000_000;
@@ -29,449 +32,551 @@ function run(state: RoundState, actions: RoundAction[]): RoundState {
   return actions.reduce(reduce, state);
 }
 
-/** READY, then Main short press. */
+/** READY, then a Main short press (Start). */
 function started(now = T0): RoundState {
-  return run(initialRoundState, [{ type: "mainShort", now }]);
+  return reduce(initialRoundState, { type: "mainShort", now });
 }
 
-function selectMode(state: RoundState, presses: number): RoundState {
-  return run(
-    state,
-    Array.from({ length: presses }, () => ({ type: "modeShort" }) as const),
-  );
+function ticked(state: RoundState, now: number): RoundState {
+  return reduce(state, { type: "tick", now });
 }
 
-function selectOption(state: RoundState, presses: number): RoundState {
-  return run(
-    state,
-    Array.from({ length: presses }, () => ({ type: "modeLong" }) as const),
-  );
+function paused(state: RoundState, now: number): RoundState {
+  return reduce(state, { type: "mainShort", now });
 }
 
-describe("the agreed selection lists", () => {
-  it("are exactly the display lists that were agreed", () => {
-    // Mode 1 is the real round; 2-5 are display placeholders. Base selections
-    // display as a bare number, not "2a".
-    expect(MODE_SELECTIONS).toEqual([
-      ["1"],
-      ["2", "2b", "2c"],
-      ["3", "3b"],
-      ["4", "4b", "4c"],
-      ["5", "5a", "5b"],
-    ]);
-  });
+function reset(state: RoundState): RoundState {
+  return reduce(state, { type: "mainLong", now: T0 + 999 * MINUTE });
+}
 
-  it("gives every mode the same five minutes, inventing no preset durations", () => {
-    for (let mode = 0; mode < MODE_SELECTIONS.length; mode += 1) {
-      expect(roundDurationMs(mode)).toBe(ROUND_MS);
-    }
-  });
-});
+const nextPreset: RoundAction = { type: "nextPreset" };
+const nextMode: RoundAction = { type: "nextMode" };
 
-describe("the initial state", () => {
-  it("is READY on mode 1 with a full round showing", () => {
-    expect(initialRoundState.phase).toBe("ready");
-    expect(selectionLabel(initialRoundState)).toBe("1");
+describe("the initial session", () => {
+  it("is READY on Rolls, preset 1, at round 1 and a full work duration", () => {
+    expect(initialRoundState.status).toBe("ready");
+    expect(initialRoundState.phase).toBe("work");
+    expect(currentMode(initialRoundState).title).toBe("ROLLS");
+    expect(currentPresetIndex(initialRoundState)).toBe(0);
+    expect(initialRoundState.round).toBe(1);
+    expect(initialRoundState.deadline).toBeNull();
+    expect(displayMs(initialRoundState, T0)).toBe(5 * MINUTE);
+    expect(selectionAllowed(initialRoundState)).toBe(true);
     expect(mainLabel(initialRoundState)).toBe("Start");
-    expect(displayMs(initialRoundState, T0)).toBe(ROUND_MS);
-    expect(isPlaceholderMode(initialRoundState)).toBe(false);
-    expect(modeIsActive(initialRoundState)).toBe(true);
+    expect(phaseLabel(initialRoundState)).toBe("ROLL");
+    expect(nextPhase(initialRoundState)).toEqual({
+      label: "ROLL",
+      ms: 5 * MINUTE,
+    });
+  });
+
+  it("remembers a default preset for every mode", () => {
+    expect(initialRoundState.presetIndexByMode).toEqual([0, 0]);
   });
 });
 
-describe("Main short press", () => {
-  it("starts a round from READY", () => {
-    const state = started();
+describe("starting", () => {
+  it("begins work immediately at round 1, with a full work deadline", () => {
+    const state = started(T0);
 
-    expect(state.phase).toBe("running");
-    expect(state.deadline).toBe(T0 + ROUND_MS);
-    expect(state.pausedAt).toBeNull();
+    expect(state.status).toBe("running");
+    expect(state.phase).toBe("work");
+    expect(state.round).toBe(1);
+    expect(state.deadline).toBe(T0 + 5 * MINUTE);
+    expect(state.transitionSeq).toBe(1);
+    expect(state.lastTransition).toBe("work");
+    expect(mainLabel(state)).toBe("Pause");
+    expect(displayMs(state, T0)).toBe(5 * MINUTE);
   });
 
-  it("pauses from RUNNING by remembering when, not how much is left", () => {
-    const state = run(started(), [
-      { type: "mainShort", now: T0 + 30 * SECOND },
+  it("uses the selected Drills preset's full work duration", () => {
+    const chosen = run(initialRoundState, [
+      { type: "selectMode", modeIndex: 1 },
+      { type: "selectPreset", presetIndex: 1 },
     ]);
 
-    expect(state.phase).toBe("paused");
-    expect(state.pausedAt).toBe(T0 + 30 * SECOND);
-    expect(state.deadline).toBe(T0 + ROUND_MS);
-  });
+    expect(chosen.status).toBe("ready");
 
-  it("resumes from PAUSED onto a new deadline, not a fresh round", () => {
-    const paused = run(started(), [
-      { type: "mainShort", now: T0 + 2 * MINUTE + 34 * SECOND },
-    ]);
+    const startedDrills = reduce(chosen, { type: "mainShort", now: T0 });
 
-    const resumed = run(paused, [{ type: "mainShort", now: T0 + 20 * MINUTE }]);
-
-    const frozen = ROUND_MS - (2 * MINUTE + 34 * SECOND);
-
-    expect(resumed.phase).toBe("running");
-    expect(resumed.deadline).toBe(T0 + 20 * MINUTE + frozen);
-    expect(resumed.deadline).not.toBe(T0 + 20 * MINUTE + ROUND_MS);
-    expect(displayMs(resumed, T0 + 20 * MINUTE)).toBe(frozen);
-  });
-
-  it("acknowledges from FINISHED back to READY", () => {
-    const finished = run(started(), [{ type: "tick", now: T0 + ROUND_MS }]);
-    const state = run(finished, [
-      { type: "mainShort", now: T0 + ROUND_MS + 1 },
-    ]);
-
-    expect(finished.phase).toBe("finished");
-    expect(state.phase).toBe("ready");
-    expect(state.deadline).toBeNull();
+    expect(startedDrills.deadline).toBe(T0 + 1 * MINUTE);
+    expect(displayMs(startedDrills, T0)).toBe(1 * MINUTE);
+    expect(phaseLabel(startedDrills)).toBe("DRILL");
+    expect(startedDrills.transitionSeq).toBe(1);
   });
 });
 
-describe("the Main label", () => {
-  it("describes the next short press in every state", () => {
-    const paused = run(started(), [{ type: "mainShort", now: T0 }]);
-    const finished = run(started(), [{ type: "tick", now: T0 + ROUND_MS }]);
+describe("the repeating work-rest cycle", () => {
+  it("moves from work to the full rest at the work deadline", () => {
+    const state = ticked(started(T0), T0 + 5 * MINUTE);
 
-    expect(mainLabel(initialRoundState)).toBe("Start");
-    expect(mainLabel(started())).toBe("Pause");
-    expect(mainLabel(paused)).toBe("Resume");
-    expect(mainLabel(finished)).toBe("Reset");
+    expect(state.status).toBe("running");
+    expect(state.phase).toBe("rest");
+    expect(state.round).toBe(1);
+    expect(state.deadline).toBe(T0 + 6 * MINUTE);
+    expect(displayMs(state, T0 + 5 * MINUTE)).toBe(1 * MINUTE);
+    expect(phaseLabel(state)).toBe("REST");
+    expect(nextPhase(state)).toEqual({ label: "ROLL", ms: 5 * MINUTE });
+    expect(state.transitionSeq).toBe(2);
+    expect(state.lastTransition).toBe("rest");
+  });
+
+  it("starts the next full work and increments the round after rest", () => {
+    const state = run(started(T0), [
+      { type: "tick", now: T0 + 5 * MINUTE },
+      { type: "tick", now: T0 + 6 * MINUTE },
+    ]);
+
+    expect(state.phase).toBe("work");
+    expect(state.round).toBe(2);
+    expect(state.deadline).toBe(T0 + 11 * MINUTE);
+    expect(displayMs(state, T0 + 6 * MINUTE)).toBe(5 * MINUTE);
+    expect(nextPhase(state)).toEqual({ label: "REST", ms: 1 * MINUTE });
+    expect(state.transitionSeq).toBe(3);
+    expect(state.lastTransition).toBe("work");
+  });
+
+  it("keeps the round number through rest and increments only on the next work", () => {
+    const afterThreePhases = run(started(T0), [
+      { type: "tick", now: T0 + 5 * MINUTE },
+      { type: "tick", now: T0 + 6 * MINUTE },
+      { type: "tick", now: T0 + 11 * MINUTE },
+      { type: "tick", now: T0 + 12 * MINUTE },
+    ]);
+
+    expect(afterThreePhases.round).toBe(3);
+    expect(afterThreePhases.phase).toBe("work");
+    expect(afterThreePhases.deadline).toBe(T0 + 17 * MINUTE);
+  });
+
+  it("does not transition before the phase deadline", () => {
+    const state = started(T0);
+    const justBefore = ticked(state, T0 + 5 * MINUTE - 1);
+
+    expect(justBefore.phase).toBe("work");
+    expect(justBefore.round).toBe(1);
+    expect(justBefore.transitionSeq).toBe(1);
+  });
+
+  it("advances several phases in one late tick without drift", () => {
+    const state = ticked(started(T0), T0 + 20 * MINUTE);
+
+    // 5 work, 1 rest, 5 work, 1 rest, 5 work, 1 rest, then work round 4.
+    expect(state.phase).toBe("work");
+    expect(state.round).toBe(4);
+    expect(state.deadline).toBe(T0 + 23 * MINUTE);
+    expect(state.transitionSeq).toBe(7);
+    expect(state.lastTransition).toBe("work");
+    expect(displayMs(state, T0 + 20 * MINUTE)).toBe(3 * MINUTE);
+  });
+
+  it("lands exactly on a boundary as the phase that starts there", () => {
+    const rest = ticked(started(T0), T0 + 5 * MINUTE);
+    const work = ticked(rest, T0 + 6 * MINUTE);
+
+    expect(rest.phase).toBe("rest");
+    expect(rest.deadline).toBe(T0 + 6 * MINUTE);
+    expect(work.phase).toBe("work");
+    expect(work.round).toBe(2);
+    expect(work.deadline).toBe(T0 + 11 * MINUTE);
+  });
+
+  it("is idempotent when the same late tick is delivered twice", () => {
+    const late = ticked(started(T0), T0 + 20 * MINUTE);
+    const repeated = ticked(late, T0 + 20 * MINUTE);
+
+    expect(repeated).toEqual(late);
+    expect(repeated.transitionSeq).toBe(late.transitionSeq);
   });
 });
 
 describe("pause and resume", () => {
-  it("freezes the exact remainder while paused", () => {
-    const paused = run(started(), [
-      { type: "mainShort", now: T0 + 2 * MINUTE + 34 * SECOND },
-    ]);
+  it("freezes and resumes work from its remaining time", () => {
+    const work = started(T0);
+    const pausedWork = paused(work, T0 + 2 * MINUTE);
 
-    // Hours later, the frozen reading is unchanged: it is derived from the
-    // timestamp the round was paused at, never from a stored countdown.
-    expect(displayMs(paused, T0 + 2 * MINUTE + 34 * SECOND)).toBe(
-      ROUND_MS - (2 * MINUTE + 34 * SECOND),
-    );
-    expect(displayMs(paused, T0 + 6 * 60 * MINUTE)).toBe(
-      ROUND_MS - (2 * MINUTE + 34 * SECOND),
-    );
+    expect(pausedWork.status).toBe("paused");
+    expect(pausedWork.phase).toBe("work");
+    expect(pausedWork.round).toBe(1);
+    expect(pausedWork.pausedAt).toBe(T0 + 2 * MINUTE);
+    expect(displayMs(pausedWork, T0 + 2 * MINUTE)).toBe(3 * MINUTE);
+    expect(displayMs(pausedWork, T0 + 50 * MINUTE)).toBe(3 * MINUTE);
+    expect(mainLabel(pausedWork)).toBe("Resume");
+
+    const stillPaused = ticked(pausedWork, T0 + 50 * MINUTE);
+    expect(stillPaused).toEqual(pausedWork);
+
+    const resumed = paused(pausedWork, T0 + 50 * MINUTE);
+
+    expect(resumed.status).toBe("running");
+    expect(resumed.phase).toBe("work");
+    expect(resumed.round).toBe(1);
+    expect(resumed.deadline).toBe(T0 + 53 * MINUTE);
+    expect(displayMs(resumed, T0 + 50 * MINUTE)).toBe(3 * MINUTE);
+    expect(resumed.transitionSeq).toBe(1);
+
+    const late = ticked(resumed, T0 + 52 * MINUTE + 59 * SECOND);
+    expect(late.phase).toBe("work");
+
+    const rest = ticked(resumed, T0 + 53 * MINUTE);
+    expect(rest.phase).toBe("rest");
+    expect(rest.round).toBe(1);
   });
 
-  it("continues from the frozen remainder after resuming", () => {
-    const paused = run(started(), [
-      { type: "mainShort", now: T0 + 2 * MINUTE + 34 * SECOND },
-    ]);
-    const resumedAt = T0 + 30 * MINUTE;
-    const resumed = run(paused, [{ type: "mainShort", now: resumedAt }]);
+  it("freezes and resumes a rest phase without changing phase or round", () => {
+    const rest = ticked(started(T0), T0 + 5 * MINUTE);
+    const pausedRest = paused(rest, T0 + 5 * MINUTE + 30 * SECOND);
 
-    expect(displayMs(resumed, resumedAt)).toBe(
-      ROUND_MS - (2 * MINUTE + 34 * SECOND),
-    );
-    expect(displayMs(resumed, resumedAt + SECOND)).toBe(
-      ROUND_MS - (2 * MINUTE + 35 * SECOND),
-    );
+    expect(pausedRest.status).toBe("paused");
+    expect(pausedRest.phase).toBe("rest");
+    expect(pausedRest.round).toBe(1);
+    expect(displayMs(pausedRest, T0 + 20 * MINUTE)).toBe(30 * SECOND);
+
+    const resumed = paused(pausedRest, T0 + 20 * MINUTE);
+
+    expect(resumed.deadline).toBe(T0 + 20 * MINUTE + 30 * SECOND);
+    expect(displayMs(resumed, T0 + 20 * MINUTE)).toBe(30 * SECOND);
+
+    const nextWork = ticked(resumed, T0 + 20 * MINUTE + 30 * SECOND);
+
+    expect(nextWork.phase).toBe("work");
+    expect(nextWork.round).toBe(2);
+    expect(nextWork.deadline).toBe(T0 + 25 * MINUTE + 30 * SECOND);
+    expect(nextWork.transitionSeq).toBe(3);
   });
 
-  it("preserves mode and option across pause and resume", () => {
-    const chosen = selectOption(selectMode(initialRoundState, 3), 2);
+  it("does not fire a cue on pause or resume", () => {
+    const work = started(T0);
+    const pausedWork = paused(work, T0 + MINUTE);
+    const resumed = paused(pausedWork, T0 + 10 * MINUTE);
 
-    expect(selectionLabel(chosen)).toBe("4c");
-
-    const running = run(chosen, [{ type: "mainShort", now: T0 + MINUTE }]);
-    const paused = run(running, [{ type: "mainShort", now: T0 + 2 * MINUTE }]);
-    const resumed = run(paused, [{ type: "mainShort", now: T0 + 10 * MINUTE }]);
-
-    expect(resumed.phase).toBe("running");
-    expect(selectionLabel(resumed)).toBe("4c");
-    expect(displayMs(resumed, T0 + 10 * MINUTE)).toBe(
-      roundDurationMs(3) - MINUTE,
-    );
-  });
-
-  it("loses and gains no milliseconds across a pause and resume", () => {
-    const first = started(T0);
-    const pausedAt = T0 + 137_419; // deliberately not on a second boundary
-    const paused = run(first, [{ type: "mainShort", now: pausedAt }]);
-    const frozen = (paused.deadline ?? 0) - pausedAt;
-
-    expect(frozen).toBe(300_000 - 137_419);
-
-    const resumedAt = T0 + 9_137_419;
-    const resumed = run(paused, [{ type: "mainShort", now: resumedAt }]);
-
-    // The new deadline carries the exact frozen remainder, to the millisecond.
-    expect(resumed.deadline).toBe(resumedAt + frozen);
-    // And the display neither jumps nor rounds into a gain.
-    expect(displayMs(resumed, resumedAt)).toBe(displayMs(paused, resumedAt));
-    expect(formatRemaining(displayMs(resumed, resumedAt))).toBe("2:43");
-    expect(formatRemaining(displayMs(paused, resumedAt))).toBe("2:43");
+    expect(pausedWork.transitionSeq).toBe(work.transitionSeq);
+    expect(resumed.transitionSeq).toBe(work.transitionSeq);
   });
 });
 
-describe("a short press that spans a timer state change", () => {
-  it("is ignored when the phase has already moved on", () => {
-    const running = started();
-    const finished = run(running, [{ type: "tick", now: T0 + ROUND_MS }]);
+describe("reset", () => {
+  it("returns READY, round 1, at the full work duration", () => {
+    const resetState = reset(started(T0));
 
-    const afterStalePress = run(finished, [
-      { type: "mainShort", now: T0 + ROUND_MS + 1, fromPhase: "running" },
-    ]);
-
-    expect(afterStalePress).toEqual(finished);
+    expect(resetState.status).toBe("ready");
+    expect(resetState.phase).toBe("work");
+    expect(resetState.round).toBe(1);
+    expect(resetState.deadline).toBeNull();
+    expect(resetState.pausedAt).toBeNull();
+    expect(displayMs(resetState, T0 + 999 * MINUTE)).toBe(5 * MINUTE);
+    expect(mainLabel(resetState)).toBe("Start");
+    expect(selectionAllowed(resetState)).toBe(true);
   });
 
-  it("cannot resume a session paused by another input", () => {
-    const paused = run(started(), [{ type: "mainShort", now: T0 + MINUTE }]);
+  it("works from Running work, Running rest, and Paused", () => {
+    const runningWork = started(T0);
+    const runningRest = ticked(runningWork, T0 + 5 * MINUTE);
+    const pausedWork = paused(runningWork, T0 + 2 * MINUTE);
+    const pausedRest = paused(runningRest, T0 + 5 * MINUTE + 30 * SECOND);
 
-    const afterStalePress = run(paused, [
-      { type: "mainShort", now: T0 + 2 * MINUTE, fromPhase: "running" },
-    ]);
+    for (const before of [runningWork, runningRest, pausedWork, pausedRest]) {
+      const after = reset(before);
 
-    expect(afterStalePress).toEqual(paused);
+      expect(after.status).toBe("ready");
+      expect(after.phase).toBe("work");
+      expect(after.round).toBe(1);
+      expect(after.deadline).toBeNull();
+      expect(after.lastTransition).toBeNull();
+    }
   });
 
-  it("still applies when the phase is unchanged", () => {
-    const running = started();
-
-    const paused = run(running, [
-      { type: "mainShort", now: T0 + MINUTE, fromPhase: "running" },
+  it("preserves the selected mode and preset", () => {
+    const chosen = run(initialRoundState, [
+      { type: "selectMode", modeIndex: 1 },
+      { type: "selectPreset", presetIndex: 1 },
     ]);
+    const running = reduce(chosen, { type: "mainShort", now: T0 });
+    const resetState = reset(running);
 
-    expect(paused.phase).toBe("paused");
+    expect(currentMode(resetState).title).toBe("DRILLS");
+    expect(currentPresetIndex(resetState)).toBe(1);
+    expect(displayMs(resetState, T0)).toBe(1 * MINUTE);
   });
 
-  it("does not restrict an untracked press", () => {
-    const paused = run(started(), [{ type: "mainShort", now: T0 + MINUTE }]);
+  it("does not fire a cue", () => {
+    const running = started(T0);
+    const resetState = reset(running);
 
-    const resumed = run(paused, [{ type: "mainShort", now: T0 + 2 * MINUTE }]);
-
-    expect(resumed.phase).toBe("running");
+    expect(resetState.transitionSeq).toBe(running.transitionSeq);
   });
 });
 
-describe("Main long press resets from every state", () => {
-  const paused = run(started(), [{ type: "mainShort", now: T0 + MINUTE }]);
-  const finished = run(started(), [{ type: "tick", now: T0 + ROUND_MS }]);
+describe("mode and preset selection while ready", () => {
+  it("switches to Drills and loads its first preset", () => {
+    const state = reduce(initialRoundState, {
+      type: "selectMode",
+      modeIndex: 1,
+    });
 
-  const states: [string, RoundState][] = [
-    ["READY", initialRoundState],
-    ["RUNNING", started()],
-    ["PAUSED", paused],
-    ["FINISHED", finished],
+    expect(state.modeIndex).toBe(1);
+    expect(currentMode(state).title).toBe("DRILLS");
+    expect(currentPresetIndex(state)).toBe(0);
+    expect(state.status).toBe("ready");
+    expect(state.phase).toBe("work");
+    expect(state.round).toBe(1);
+    expect(displayMs(state, T0)).toBe(2 * MINUTE);
+    expect(nextPhase(state)).toEqual({ label: "DRILL", ms: 2 * MINUTE });
+  });
+
+  it("selects a preset and loads its full work duration", () => {
+    const state = run(initialRoundState, [
+      { type: "selectPreset", presetIndex: 1 },
+    ]);
+
+    expect(currentPresetIndex(state)).toBe(1);
+    expect(displayMs(state, T0)).toBe(3 * MINUTE);
+    expect(currentPreset(state).id).toBe("rolls-3-1");
+    expect(state.status).toBe("ready");
+    expect(state.transitionSeq).toBe(0);
+  });
+
+  it("remembers each mode's last preset", () => {
+    const rollsSecond = run(initialRoundState, [
+      { type: "selectPreset", presetIndex: 1 },
+      nextMode,
+      { type: "selectPreset", presetIndex: 1 },
+      nextMode,
+    ]);
+
+    expect(currentMode(rollsSecond).title).toBe("ROLLS");
+    expect(currentPresetIndex(rollsSecond)).toBe(1);
+    expect(displayMs(rollsSecond, T0)).toBe(3 * MINUTE);
+
+    const drillsSecond = reduce(rollsSecond, nextMode);
+
+    expect(currentMode(drillsSecond).title).toBe("DRILLS");
+    expect(currentPresetIndex(drillsSecond)).toBe(1);
+    expect(displayMs(drillsSecond, T0)).toBe(1 * MINUTE);
+  });
+
+  it("cycles presets in order and wraps within the current mode", () => {
+    const rolls = [0, 1, 2].map((presses) =>
+      run(
+        initialRoundState,
+        Array.from({ length: presses }, () => nextPreset),
+      ),
+    );
+
+    expect(rolls.map(currentPresetIndex)).toEqual([0, 1, 0]);
+
+    const drills = run(initialRoundState, [
+      { type: "selectMode", modeIndex: 1 },
+      nextPreset,
+      nextPreset,
+    ]);
+
+    expect(currentMode(drills).title).toBe("DRILLS");
+    expect(currentPresetIndex(drills)).toBe(0);
+  });
+
+  it("cycles main modes Rolls -> Drills -> Rolls", () => {
+    const labels = [0, 1, 2].map(
+      (presses) =>
+        currentMode(
+          run(
+            initialRoundState,
+            Array.from({ length: presses }, () => nextMode),
+          ),
+        ).title,
+    );
+
+    expect(labels).toEqual(["ROLLS", "DRILLS", "ROLLS"]);
+  });
+
+  it("does not restart a cue or a blocked-attempt message", () => {
+    const state = run(initialRoundState, [
+      { type: "selectMode", modeIndex: 1 },
+      nextPreset,
+    ]);
+
+    expect(state.transitionSeq).toBe(0);
+    expect(state.blockedSelectionSeq).toBe(0);
+    expect(state.lastTransition).toBeNull();
+  });
+
+  it("ignores the same selection and invalid indices", () => {
+    const sameMode = reduce(initialRoundState, {
+      type: "selectMode",
+      modeIndex: 0,
+    });
+    const samePreset = reduce(initialRoundState, {
+      type: "selectPreset",
+      presetIndex: 0,
+    });
+    const invalidMode = reduce(initialRoundState, {
+      type: "selectMode",
+      modeIndex: 99,
+    });
+    const invalidPreset = reduce(initialRoundState, {
+      type: "selectPreset",
+      presetIndex: 99,
+    });
+
+    expect(sameMode).toEqual(initialRoundState);
+    expect(samePreset).toEqual(initialRoundState);
+    expect(invalidMode).toEqual(initialRoundState);
+    expect(invalidPreset).toEqual(initialRoundState);
+  });
+});
+
+describe("selection is locked while running or paused", () => {
+  const attempts: RoundAction[] = [
+    nextPreset,
+    nextMode,
+    { type: "selectMode", modeIndex: 1 },
+    { type: "selectPreset", presetIndex: 1 },
   ];
 
-  it.each(states)("resets from %s to READY", (_name, state) => {
-    const reset = run(state, [{ type: "mainLong", now: T0 + MINUTE }]);
+  function expectOnlyBlocked(before: RoundState, after: RoundState): void {
+    expect(after.blockedSelectionSeq).toBe(before.blockedSelectionSeq + 1);
+    expect({
+      ...after,
+      blockedSelectionSeq: before.blockedSelectionSeq,
+    }).toEqual(before);
+  }
 
-    expect(reset.phase).toBe("ready");
-    expect(reset.deadline).toBeNull();
-    expect(reset.pausedAt).toBeNull();
+  it("refuses every selection action while running", () => {
+    const running = started(T0);
+
+    for (const action of attempts) {
+      expectOnlyBlocked(running, reduce(running, action));
+    }
   });
 
-  it("preserves the selected mode and option", () => {
-    const chosen = selectOption(selectMode(initialRoundState, 3), 2);
+  it("refuses every selection action while paused", () => {
+    const pausedWork = paused(started(T0), T0 + MINUTE);
 
-    expect(selectionLabel(chosen)).toBe("4c");
-
-    const reset = run(started(), [{ type: "mainLong", now: T0 + MINUTE }]);
-
-    expect(selectionLabel(run(chosen, [{ type: "mainLong", now: T0 }]))).toBe(
-      "4c",
-    );
-    expect(selectionLabel(reset)).toBe("1");
+    for (const action of attempts) {
+      expectOnlyBlocked(pausedWork, reduce(pausedWork, action));
+    }
   });
 
-  it("restores the full round time", () => {
-    const reset = run(started(), [{ type: "mainLong", now: T0 + 4 * MINUTE }]);
+  it("does not queue the refused change for later", () => {
+    const running = started(T0);
+    const blocked = run(running, attempts);
+    const resetState = reset(blocked);
 
-    expect(displayMs(reset, T0 + 4 * MINUTE)).toBe(ROUND_MS);
-  });
-
-  it("is a no-op in READY", () => {
-    expect(run(initialRoundState, [{ type: "mainLong", now: T0 }])).toEqual(
-      initialRoundState,
-    );
-  });
-});
-
-describe("Mode short press", () => {
-  it("cycles the top-level modes 1 -> 2 -> 3 -> 4 -> 5 -> 1", () => {
-    const labels = [0, 1, 2, 3, 4, 5].map((presses) =>
-      selectionLabel(selectMode(initialRoundState, presses)),
-    );
-
-    expect(labels).toEqual(["1", "2", "3", "4", "5", "1"]);
-  });
-
-  it("starts at the new mode's base selection", () => {
-    const onOption = selectOption(selectMode(initialRoundState, 1), 2);
-
-    expect(selectionLabel(onOption)).toBe("2c");
-
-    const next = selectMode(onOption, 1);
-
-    expect(selectionLabel(next)).toBe("3");
+    expect(currentMode(resetState).title).toBe("ROLLS");
+    expect(currentPresetIndex(resetState)).toBe(0);
+    expect(resetState.round).toBe(1);
+    expect(displayMs(resetState, T0)).toBe(5 * MINUTE);
   });
 });
 
-describe("Mode long press", () => {
-  it("cycles within mode 2: 2 -> 2b -> 2c -> 2", () => {
-    const mode2 = selectMode(initialRoundState, 1);
-
-    expect(
-      [0, 1, 2, 3].map((n) => selectionLabel(selectOption(mode2, n))),
-    ).toEqual(["2", "2b", "2c", "2"]);
-  });
-
-  it("cycles within mode 3: 3 -> 3b -> 3", () => {
-    const mode3 = selectMode(initialRoundState, 2);
-
-    expect([0, 1].map((n) => selectionLabel(selectOption(mode3, n)))).toEqual([
-      "3",
-      "3b",
-    ]);
-    expect(selectionLabel(selectOption(mode3, 2))).toBe("3");
-  });
-
-  it("cycles within mode 4: 4 -> 4b -> 4c -> 4", () => {
-    const mode4 = selectMode(initialRoundState, 3);
-
-    expect(
-      [0, 1, 2, 3].map((n) => selectionLabel(selectOption(mode4, n))),
-    ).toEqual(["4", "4b", "4c", "4"]);
-  });
-
-  it("cycles within mode 5: 5 -> 5a -> 5b -> 5", () => {
-    const mode5 = selectMode(initialRoundState, 4);
-
-    expect(
-      [0, 1, 2, 3].map((n) => selectionLabel(selectOption(mode5, n))),
-    ).toEqual(["5", "5a", "5b", "5"]);
-  });
-
-  it("does nothing on mode 1, which has no options", () => {
-    expect(selectionLabel(selectOption(initialRoundState, 3))).toBe("1");
-  });
-
-  it("marks modes 2-5 as placeholders and mode 1 as real", () => {
-    const placeholders = [1, 2, 3, 4].map((presses) =>
-      isPlaceholderMode(selectMode(initialRoundState, presses)),
-    );
-
-    expect(placeholders).toEqual([true, true, true, true]);
-    expect(isPlaceholderMode(initialRoundState)).toBe(false);
-  });
-});
-
-describe("Mode while a round is in flight", () => {
-  it("is ignored in RUNNING", () => {
-    const running = started();
-    const afterShort = selectMode(running, 3);
-    const afterLong = selectOption(running, 3);
-
-    expect(selectionLabel(afterShort)).toBe("1");
-    expect(selectionLabel(afterLong)).toBe("1");
-    expect(afterShort.phase).toBe("running");
-    expect(afterLong.phase).toBe("running");
-  });
-
-  it("is ignored in PAUSED", () => {
-    const paused = run(started(), [{ type: "mainShort", now: T0 + MINUTE }]);
-    const afterShort = selectMode(paused, 2);
-
-    expect(selectionLabel(afterShort)).toBe("1");
-    expect(afterShort.phase).toBe("paused");
-    expect(displayMs(afterShort, T0 + MINUTE)).toBe(ROUND_MS - MINUTE);
-  });
-
-  it("still works in FINISHED", () => {
-    const finished = run(started(), [{ type: "tick", now: T0 + ROUND_MS }]);
-
-    expect(selectionLabel(selectMode(finished, 1))).toBe("2");
-    expect(modeIsActive(finished)).toBe(true);
-  });
-
-  it("reports itself inactive exactly while a round is in flight", () => {
-    const paused = run(started(), [{ type: "mainShort", now: T0 }]);
-    const finished = run(started(), [{ type: "tick", now: T0 + ROUND_MS }]);
-
-    expect(modeIsActive(started())).toBe(false);
-    expect(modeIsActive(paused)).toBe(false);
-    expect(modeIsActive(initialRoundState)).toBe(true);
-    expect(modeIsActive(finished)).toBe(true);
-  });
-});
-
-describe("the tick action", () => {
-  it("finishes the round exactly at the deadline, not before", () => {
-    const running = started();
-
-    expect(run(running, [{ type: "tick", now: T0 + ROUND_MS - 1 }]).phase).toBe(
-      "running",
-    );
-    expect(run(running, [{ type: "tick", now: T0 + ROUND_MS }]).phase).toBe(
-      "finished",
-    );
-  });
-
-  it("finishes a round that is discovered to be long overdue", () => {
-    // The machine slept through the end of the round.
-    const running = started();
-
-    expect(
-      run(running, [{ type: "tick", now: T0 + ROUND_MS + 30 * MINUTE }]).phase,
-    ).toBe("finished");
-  });
-
-  it("does nothing in READY, PAUSED or FINISHED", () => {
-    const paused = run(started(), [{ type: "mainShort", now: T0 + MINUTE }]);
-    const finished = run(started(), [{ type: "tick", now: T0 + ROUND_MS }]);
-    const late = T0 + 60 * MINUTE;
-
-    expect(run(initialRoundState, [{ type: "tick", now: late }])).toEqual(
-      initialRoundState,
-    );
-    expect(run(paused, [{ type: "tick", now: late }])).toEqual(paused);
-    expect(run(finished, [{ type: "tick", now: late }])).toEqual(finished);
-  });
-
-  it("leaves the clock at 0:00 once finished", () => {
-    const finished = run(started(), [{ type: "tick", now: T0 + ROUND_MS }]);
-
-    expect(displayMs(finished, T0 + ROUND_MS)).toBe(0);
-    expect(displayMs(finished, T0 + 90 * MINUTE)).toBe(0);
-  });
-});
-
-describe("timing boundaries", () => {
-  it("sets the deadline to exactly the start plus the configured duration", () => {
-    // A deliberately off-second start, so any rounding of the deadline shows up.
-    const oddStart = T0 + 137;
-    const state = run(initialRoundState, [
-      { type: "mainShort", now: oddStart },
+describe("labels and previews", () => {
+  it("uses ROLL, DRILL and REST as phase labels", () => {
+    const drills = run(initialRoundState, [
+      { type: "selectMode", modeIndex: 1 },
     ]);
 
-    expect(state.deadline).toBe(oddStart + ROUND_MS);
-    expect((state.deadline ?? 0) - oddStart).toBe(300_000);
+    expect(phaseLabel(initialRoundState)).toBe("ROLL");
+    expect(phaseLabel(drills)).toBe("DRILL");
+    expect(phaseLabel(ticked(started(T0), T0 + 5 * MINUTE))).toBe("REST");
   });
 
-  it("says 0:01 with a second left and 0:00 only at the deadline", () => {
-    const running = started();
-    const deadline = running.deadline ?? 0;
+  it("previews the first work while ready, rest during work, and work during rest", () => {
+    const rest = ticked(started(T0), T0 + 5 * MINUTE);
 
-    expect(formatRemaining(displayMs(running, deadline - 1_000))).toBe("0:01");
-    expect(formatRemaining(displayMs(running, deadline - 1))).toBe("0:01");
-    expect(formatRemaining(displayMs(running, deadline))).toBe("0:00");
+    expect(nextPhase(initialRoundState)).toEqual({
+      label: "ROLL",
+      ms: 5 * MINUTE,
+    });
+    expect(nextPhase(started(T0))).toEqual({
+      label: "REST",
+      ms: 1 * MINUTE,
+    });
+    expect(nextPhase(rest)).toEqual({ label: "ROLL", ms: 5 * MINUTE });
   });
 
-  it("finishes at the original deadline, neither a second early nor a second late", () => {
-    const running = started();
-    const deadline = running.deadline ?? 0;
+  it("names Start, Pause and Resume for the primary action", () => {
+    const work = started(T0);
+    const pausedWork = paused(work, T0 + MINUTE);
 
-    expect(run(running, [{ type: "tick", now: deadline - 1 }]).phase).toBe(
-      "running",
-    );
-    expect(run(running, [{ type: "tick", now: deadline }]).phase).toBe(
-      "finished",
-    );
-    expect(run(running, [{ type: "tick", now: deadline + 1 }]).phase).toBe(
-      "finished",
-    );
+    expect(mainLabel(initialRoundState)).toBe("Start");
+    expect(mainLabel(work)).toBe("Pause");
+    expect(mainLabel(pausedWork)).toBe("Resume");
+  });
+
+  it("derives the current durations from the selected preset", () => {
+    const drillsSecond = run(initialRoundState, [
+      { type: "selectMode", modeIndex: 1 },
+      { type: "selectPreset", presetIndex: 1 },
+    ]);
+
+    expect(currentWorkMs(drillsSecond)).toBe(1 * MINUTE);
+    expect(currentRestMs(drillsSecond)).toBe(30 * SECOND);
+  });
+});
+
+describe("a tracked green press across a state change", () => {
+  const readyKey = stateKey(initialRoundState);
+  const runningKey = stateKey(started(T0));
+
+  it("starts when the recorded state still matches", () => {
+    const state = reduce(initialRoundState, {
+      type: "mainShort",
+      now: T0,
+      fromState: readyKey,
+    });
+
+    expect(state.status).toBe("running");
+  });
+
+  it("is ignored when the session moved to another phase", () => {
+    const running = started(T0);
+    const staleRelease = reduce(running, {
+      type: "mainShort",
+      now: T0 + MINUTE,
+      fromState: readyKey,
+    });
+
+    expect(staleRelease).toEqual(running);
+    expect(staleRelease.status).toBe("running");
+    expect(staleRelease.phase).toBe("work");
+  });
+
+  it("does not pause after work has become rest", () => {
+    const rest = ticked(started(T0), T0 + 5 * MINUTE);
+    const stale = reduce(rest, {
+      type: "mainShort",
+      now: T0 + 5 * MINUTE + SECOND,
+      fromState: runningKey,
+    });
+
+    expect(stale).toEqual(rest);
+    expect(stale.phase).toBe("rest");
+    expect(stale.status).toBe("running");
+  });
+
+  it("still accepts an untracked on-screen press", () => {
+    const pausedWork = paused(started(T0), T0 + MINUTE);
+    const resumed = reduce(pausedWork, {
+      type: "mainShort",
+      now: T0 + 2 * MINUTE,
+    });
+
+    expect(resumed.status).toBe("running");
+  });
+});
+
+describe("state keys", () => {
+  it("change with status, phase and round", () => {
+    const work = started(T0);
+    const rest = ticked(work, T0 + 5 * MINUTE);
+    const nextWork = ticked(rest, T0 + 6 * MINUTE);
+
+    expect(stateKey(initialRoundState)).toBe("ready:work:1");
+    expect(stateKey(work)).toBe("running:work:1");
+    expect(stateKey(rest)).toBe("running:rest:1");
+    expect(stateKey(nextWork)).toBe("running:work:2");
+    expect(
+      new Set([stateKey(work), stateKey(rest), stateKey(nextWork)]).size,
+    ).toBe(3);
   });
 });

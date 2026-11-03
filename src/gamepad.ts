@@ -36,7 +36,7 @@ export interface ButtonStateLike {
 }
 
 /**
- * The subset of a `Gamepad` this module needs. Narrow on purpose: tests can
+ * The subset of a `Gamepad` this module needs. Limited on purpose: tests can
  * pass plain objects, and nothing here depends on a device name or index.
  */
 export interface GamepadLike {

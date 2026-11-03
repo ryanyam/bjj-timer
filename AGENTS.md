@@ -28,6 +28,18 @@ intervention.
   avoid unrelated refactors, dependency upgrades, and new frameworks.
 - Complete one feature or closely related batch per task.
 
+## Display target (permanent)
+
+- This app is used only on TV displays. Target landscape 16:9 screens at
+  1920×1080, 2560×1440, and 3840×2160.
+- Do not add, suggest, or test mobile, tablet, portrait, narrow-viewport,
+  or small-screen layouts.
+- Do not add responsive breakpoints, wrapping or stacking fallbacks, or
+  mobile-detection code.
+- Do not mention narrow or mobile viewports in prompts, code comments,
+  tests, or summaries unless I ask for them.
+- Keep resolution scaling across the three TV sizes.
+
 ## Product constraints
 
 - The intended finished timer has exactly two operator inputs:

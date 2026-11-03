@@ -43,7 +43,55 @@ function mainButton(): HTMLElement {
 }
 
 function mainLabelText(): string {
-  return mainButton().textContent?.trim() ?? "";
+  return mainButton().getAttribute("aria-label") ?? "";
+}
+
+function badgeText(): string {
+  return document.querySelector(".status-badge")?.textContent?.trim() ?? "";
+}
+
+function phaseText(): string {
+  return badgeText().match(/\b(WORK|REST)\b/)?.[1] ?? "";
+}
+
+function modeContextText(): string {
+  return badgeText().match(/\b(ROLLS|DRILLS)\b/)?.[1] ?? "";
+}
+
+function roundText(): string {
+  return (
+    [...document.querySelectorAll(".meta-item")]
+      .find((item) => item.textContent?.startsWith("ROUND "))
+      ?.textContent?.trim() ?? ""
+  );
+}
+
+function nextText(): string {
+  return (
+    [...document.querySelectorAll(".meta-item")]
+      .find((item) => item.textContent?.startsWith("NEXT:"))
+      ?.textContent?.trim() ?? ""
+  );
+}
+
+function messageText(): string {
+  return (
+    document.querySelector(".timer-card__notice")?.textContent?.trim() ?? ""
+  );
+}
+
+function mainElement(): HTMLElement {
+  const element = document.querySelector(".app");
+
+  if (!(element instanceof HTMLElement)) {
+    throw new Error("App root not found");
+  }
+
+  return element;
+}
+
+function pausedBadge(): HTMLElement | null {
+  return document.querySelector(".status-badge--paused");
 }
 
 function modeRow(): HTMLElement {
@@ -76,42 +124,6 @@ function activePreset(): HTMLElement {
   }
 
   return active;
-}
-
-function phaseText(): string {
-  return document.querySelector(".timer__phase")?.textContent?.trim() ?? "";
-}
-
-function modeContextText(): string {
-  return (
-    document.querySelector(".timer__mode-context")?.textContent?.trim() ?? ""
-  );
-}
-
-function roundText(): string {
-  return document.querySelector(".timer__round")?.textContent?.trim() ?? "";
-}
-
-function nextText(): string {
-  return document.querySelector(".timer__next")?.textContent?.trim() ?? "";
-}
-
-function messageText(): string {
-  return screen.getByRole("status").textContent?.trim() ?? "";
-}
-
-function mainElement(): HTMLElement {
-  const element = document.querySelector(".timer");
-
-  if (!(element instanceof HTMLElement)) {
-    throw new Error("Timer root not found");
-  }
-
-  return element;
-}
-
-function pausedBadge(): HTMLElement | null {
-  return screen.queryByText("PAUSED");
 }
 
 function advance(ms: number): void {
@@ -221,12 +233,13 @@ describe("the initial selection", () => {
     expect(presetOptions()[1].getAttribute("aria-pressed")).toBe("false");
   });
 
-  it("shows the compact Ready-state control hint", () => {
+  it("does not render a permanent helper line under the selectors", () => {
     render(<App />);
 
-    expect(messageText()).toBe(
-      "White: preset · Hold white: mode · Green: start",
-    );
+    expect(document.querySelector(".timer-card__notice")).toBeNull();
+    expect(
+      screen.queryByText("White: preset · Hold white: mode · Green: start"),
+    ).toBeNull();
   });
 
   it("marks selectors as available while ready", () => {
@@ -467,7 +480,8 @@ describe("running a work/rest session", () => {
 
     expect(workCue).not.toHaveBeenCalled();
     expect(restCue).not.toHaveBeenCalled();
-    expect(vi.getTimerCount()).toBe(0);
+    // Clock interval remains; the countdown loop has stopped.
+    expect(vi.getTimerCount()).toBe(1);
 
     advance(10 * MINUTE);
 
@@ -585,7 +599,8 @@ describe("pause, resume and reset", () => {
     expect(mainLabelText()).toBe("Start");
     expect(clockText()).toBe("5:00");
     expect(mainElement().getAttribute("data-status")).toBe("ready");
-    expect(vi.getTimerCount()).toBe(0);
+    // Clock interval remains; no countdown loop is running.
+    expect(vi.getTimerCount()).toBe(1);
   });
 
   it("does not start before 1,500 ms", () => {
@@ -597,6 +612,86 @@ describe("pause, resume and reset", () => {
 
     expect(mainLabelText()).toBe("Pause");
     expect(clockText()).toBe("5:00");
+  });
+});
+
+describe("Main hold progress", () => {
+  function holdStyle(): string {
+    return mainButton().getAttribute("style") ?? "";
+  }
+
+  it("fills halfway and clears on an early release without resetting", () => {
+    render(<App />);
+
+    fireEvent.pointerDown(mainButton());
+    expect(holdStyle()).toContain("--main-hold: 0%");
+
+    advance(MAIN_BUTTON_HOLD_MS / 2);
+    expect(holdStyle()).toContain("--main-hold: 50%");
+
+    fireEvent.pointerUp(mainButton());
+
+    expect(holdStyle()).toContain("--main-hold: 0%");
+    expect(mainLabelText()).toBe("Pause");
+    expect(clockText()).toBe("5:00");
+  });
+
+  it("reaches full and resets exactly once at the threshold", () => {
+    render(<App />);
+
+    fireEvent.pointerDown(mainButton());
+    advance(MAIN_BUTTON_HOLD_MS - 50);
+    expect(holdStyle()).toContain("--main-hold: 97%");
+
+    advance(50);
+
+    expect(mainLabelText()).toBe("Start");
+    expect(clockText()).toBe("5:00");
+    expect(holdStyle()).toContain("--main-hold: 0%");
+
+    fireEvent.pointerUp(mainButton());
+
+    expect(mainLabelText()).toBe("Start");
+    expect(clockText()).toBe("5:00");
+    // Clock interval remains; the countdown loop has stopped.
+    expect(vi.getTimerCount()).toBe(1);
+  });
+
+  it("clears on pointer cancellation without resetting", () => {
+    render(<App />);
+
+    fireEvent.pointerDown(mainButton());
+    advance(MAIN_BUTTON_HOLD_MS / 2);
+    expect(holdStyle()).toContain("--main-hold: 50%");
+
+    fireEvent.pointerOut(mainButton());
+
+    expect(holdStyle()).toContain("--main-hold: 0%");
+
+    advance(2 * MAIN_BUTTON_HOLD_MS);
+    expect(mainLabelText()).toBe("Start");
+    expect(clockText()).toBe("5:00");
+
+    fireEvent.pointerUp(mainButton());
+    expect(mainLabelText()).toBe("Start");
+  });
+
+  it("clears on window blur without resetting", () => {
+    render(<App />);
+
+    fireEvent.pointerDown(mainButton());
+    advance(MAIN_BUTTON_HOLD_MS / 2);
+    expect(holdStyle()).toContain("--main-hold: 50%");
+
+    blurWindow();
+
+    expect(holdStyle()).toContain("--main-hold: 0%");
+
+    advance(2 * MAIN_BUTTON_HOLD_MS);
+    expect(mainLabelText()).toBe("Start");
+    expect(clockText()).toBe("5:00");
+    // Clock interval remains; the countdown loop has stopped.
+    expect(vi.getTimerCount()).toBe(1);
   });
 });
 
@@ -648,7 +743,7 @@ describe("selection while running or paused", () => {
     }
   });
 
-  it("clears the notice and restores the lock hint", () => {
+  it("clears the notice after its timeout", () => {
     render(<App />);
     pressMainShort();
 
@@ -658,7 +753,8 @@ describe("selection while running or paused", () => {
 
     advance(NOTICE_MS);
 
-    expect(messageText()).toBe("Selection locked — hold green to reset");
+    expect(document.querySelector(".timer-card__notice")).toBeNull();
+    expect(modeContextText()).toBe("ROLLS");
   });
 
   it("does not repeat the notice while a white hold remains down", () => {
@@ -671,11 +767,11 @@ describe("selection while running or paused", () => {
     expect(messageText()).toBe("Hold green to reset before changing.");
 
     advance(NOTICE_MS);
-    expect(messageText()).toBe("Selection locked — hold green to reset");
+    expect(document.querySelector(".timer-card__notice")).toBeNull();
 
     // Still holding: no new blocked attempt should be generated.
     advance(5 * MODE_BUTTON_HOLD_MS);
-    expect(messageText()).toBe("Selection locked — hold green to reset");
+    expect(document.querySelector(".timer-card__notice")).toBeNull();
 
     fireEvent.pointerUp(modeButton());
     expect(modeContextText()).toBe("ROLLS");
@@ -748,7 +844,8 @@ describe("abandoning and guarding presses", () => {
     advance(2 * SECOND);
 
     expect(clockText()).toBe("4:58");
-    expect(vi.getTimerCount()).toBe(1);
+    // One wall-clock interval plus one countdown loop.
+    expect(vi.getTimerCount()).toBe(2);
   });
 
   it("leaves no ticking loop behind after reset or unmount", () => {
@@ -758,7 +855,8 @@ describe("abandoning and guarding presses", () => {
     expect(vi.getTimerCount()).toBeGreaterThan(0);
 
     pressMainLong();
-    expect(vi.getTimerCount()).toBe(0);
+    // Clock interval remains; the countdown loop has stopped.
+    expect(vi.getTimerCount()).toBe(1);
 
     pressMainShort();
     advance(1 * SECOND);

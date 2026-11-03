@@ -1,0 +1,34 @@
+import { describe, expect, it } from "vitest";
+import { formatClock } from "./clock";
+
+describe("formatClock", () => {
+  it("formats the local date and a 12-hour time with seconds", () => {
+    const morning = new Date(2026, 10, 3, 10, 44, 45);
+
+    expect(formatClock(morning, "en-US")).toEqual({
+      date: "TUE, NOV 3, 2026",
+      time: "10:44:45",
+      period: "AM",
+    });
+  });
+
+  it("uses a compact PM indicator in the afternoon", () => {
+    const afternoon = new Date(2026, 10, 3, 15, 5, 9);
+
+    expect(formatClock(afternoon, "en-US")).toEqual({
+      date: "TUE, NOV 3, 2026",
+      time: "03:05:09",
+      period: "PM",
+    });
+  });
+
+  it("shows midnight as 12 AM", () => {
+    const midnight = new Date(2026, 10, 3, 0, 0, 0);
+
+    expect(formatClock(midnight, "en-US")).toEqual({
+      date: "TUE, NOV 3, 2026",
+      time: "12:00:00",
+      period: "AM",
+    });
+  });
+});

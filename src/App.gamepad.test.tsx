@@ -85,29 +85,37 @@ function mainButton(): HTMLElement {
 }
 
 function mainLabel(): string {
-  return mainButton().textContent?.trim() ?? "";
+  return mainButton().getAttribute("aria-label") ?? "";
 }
 
 function clockText(): string {
   return screen.getByRole("timer").textContent?.trim() ?? "";
 }
 
+function badgeText(): string {
+  return document.querySelector(".status-badge")?.textContent?.trim() ?? "";
+}
+
 function phaseText(): string {
-  return document.querySelector(".timer__phase")?.textContent?.trim() ?? "";
+  return badgeText().match(/\b(WORK|REST)\b/)?.[1] ?? "";
 }
 
 function modeContextText(): string {
-  return (
-    document.querySelector(".timer__mode-context")?.textContent?.trim() ?? ""
-  );
+  return badgeText().match(/\b(ROLLS|DRILLS)\b/)?.[1] ?? "";
 }
 
 function roundText(): string {
-  return document.querySelector(".timer__round")?.textContent?.trim() ?? "";
+  return (
+    [...document.querySelectorAll(".meta-item")]
+      .find((item) => item.textContent?.startsWith("ROUND "))
+      ?.textContent?.trim() ?? ""
+  );
 }
 
 function messageText(): string {
-  return screen.getByRole("status").textContent?.trim() ?? "";
+  return (
+    document.querySelector(".timer-card__notice")?.textContent?.trim() ?? ""
+  );
 }
 
 function presetRow(): HTMLElement {
@@ -271,7 +279,8 @@ describe("the green MAIN button", () => {
     frameAt(100 + MAIN_BUTTON_HOLD_MS);
     expect(mainLabel()).toBe("Start");
     expect(clockText()).toBe("5:00");
-    expect(vi.getTimerCount()).toBe(0);
+    // The wall-clock interval remains; the countdown loop has stopped.
+    expect(vi.getTimerCount()).toBe(1);
 
     // Continuing to hold and releasing do not reset or start again.
     frameAt(100 + MAIN_BUTTON_HOLD_MS * 3);
@@ -290,7 +299,8 @@ describe("the green MAIN button", () => {
 
     expect(mainLabel()).toBe("Start");
     expect(clockText()).toBe("5:00");
-    expect(vi.getTimerCount()).toBe(0);
+    // Clock interval remains; the countdown loop is stopped.
+    expect(vi.getTimerCount()).toBe(1);
   });
 
   it("shows press feedback and hold progress", () => {
@@ -434,11 +444,11 @@ describe("the white MODE/OPTION button", () => {
     expect(messageText()).toBe("Hold green to reset before changing.");
 
     advance(NOTICE_MS);
-    expect(messageText()).toBe("Selection locked — hold green to reset");
+    expect(document.querySelector(".timer-card__notice")).toBeNull();
 
     // Still held: no new gesture, so the notice stays dismissed.
     frameAt(100 + MODE_BUTTON_HOLD_MS * 4);
-    expect(messageText()).toBe("Selection locked — hold green to reset");
+    expect(document.querySelector(".timer-card__notice")).toBeNull();
 
     setMode(pad, false);
     frameAt(100 + MODE_BUTTON_HOLD_MS * 4 + 16);

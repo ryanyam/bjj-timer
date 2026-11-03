@@ -137,6 +137,36 @@ export function phaseLabel(state: RoundState): string {
   return state.phase === "rest" ? "REST" : "WORK";
 }
 
+export type StatusTone = "ready" | "work" | "rest" | "paused";
+
+/** The visual/status tone for the phase badge, always paired with text. */
+export function statusTone(state: RoundState): StatusTone {
+  if (state.status === "ready") {
+    return "ready";
+  }
+
+  if (state.status === "paused") {
+    return "paused";
+  }
+
+  return state.phase === "rest" ? "rest" : "work";
+}
+
+/** Badge text combining mode, phase and run state. */
+export function statusLabel(state: RoundState): string {
+  const mode = currentMode(state).title;
+
+  if (state.status === "ready") {
+    return `READY · ${mode} · ${phaseLabel(state)}`;
+  }
+
+  if (state.status === "paused") {
+    return `PAUSED · ${mode} · ${phaseLabel(state)}`;
+  }
+
+  return `${mode} · ${phaseLabel(state)} · RUNNING`;
+}
+
 /** What follows the current (or, while ready, the first) phase. */
 export interface PhasePreview {
   readonly label: string;
@@ -164,6 +194,27 @@ export function displayMs(state: RoundState, now: number): number {
   }
 
   return remainingMs(state.deadline, state.pausedAt ?? now);
+}
+
+/**
+ * Progress through the current phase, from 0 at phase start to 1 at its
+ * deadline. Ready is 0; paused freezes at the paused reading. This drives the
+ * optional thin phase line under the countdown and is unrelated to hold-to-reset
+ * progress on the primary button.
+ */
+export function phaseProgress(state: RoundState, now: number): number {
+  if (state.status === "ready") {
+    return 0;
+  }
+
+  const duration =
+    state.phase === "rest" ? currentRestMs(state) : currentWorkMs(state);
+
+  if (duration <= 0) {
+    return 0;
+  }
+
+  return Math.min(1, Math.max(0, 1 - displayMs(state, now) / duration));
 }
 
 export function reduce(state: RoundState, action: RoundAction): RoundState {

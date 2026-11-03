@@ -1,383 +1,635 @@
 /*
- * Timer styles.
+ * Three-region TV interface: branded header, central timer stage, control bar.
  *
- * Only the timer's own rules live here: colours come from the tokens index.css
- * defines, so light/dark follows the OS with no extra CSS, and the page frame
- * (full height, no scrolling) is index.css's job.
- *
- * The selection rows are intentionally compact and stable-height: changing a
- * preset or mode must never move the countdown.
+ * Shared semantic tokens live in index.css. The layout is one fluid 16:9
+ * composition using viewport-aware clamps; there are no per-resolution
+ * layouts. The fill inside the primary control is the only full-surface
+ * animation and is driven directly by the reset hold state.
  */
 
-.timer {
-  /* Selection, readout, controls, physical-panel status. The readout takes the
-     remaining space; its own rows have stable heights. */
+.app {
   height: 100%;
+  min-height: 0;
   display: grid;
-  grid-template-rows: auto 1fr auto auto;
-  place-items: center;
-  gap: clamp(0.5rem, 1.4vh, 1.25rem);
-  padding: clamp(0.75rem, 3vh, 2.5rem);
-  box-sizing: border-box;
-  background: var(--bg);
-  color: var(--text-h);
-
-  /* Kiosk: no accidental text selection, no blue tap flash on touch screens. */
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: var(--color-page);
+  color: var(--color-text);
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
-
-  /* Consistent rest treatment for both modes. */
-  --rest-accent: #1d4ed8;
-  --rest-bg: rgba(29, 78, 216, 0.12);
 }
 
-/* Distinct mode accents, used by the selector, mode title, phase label and
-   primary controls. Text always names the mode and phase too, so colour is
-   never the only signal. */
-.timer[data-mode="rolls"] {
-  --mode-accent: #c2410c;
-  --mode-accent-bg: rgba(194, 65, 12, 0.12);
-  --mode-accent-border: rgba(194, 65, 12, 0.55);
-}
+/* ---------- Header ---------- */
 
-.timer[data-mode="drills"] {
-  --mode-accent: #0f766e;
-  --mode-accent-bg: rgba(15, 118, 110, 0.12);
-  --mode-accent-border: rgba(15, 118, 110, 0.55);
-}
-
-@media (prefers-color-scheme: dark) {
-  .timer {
-    --rest-accent: #93c5fd;
-    --rest-bg: rgba(147, 197, 253, 0.14);
-  }
-
-  .timer[data-mode="rolls"] {
-    --mode-accent: #fb923c;
-    --mode-accent-bg: rgba(251, 146, 60, 0.16);
-    --mode-accent-border: rgba(251, 146, 60, 0.6);
-  }
-
-  .timer[data-mode="drills"] {
-    --mode-accent: #2dd4bf;
-    --mode-accent-bg: rgba(45, 212, 191, 0.16);
-    --mode-accent-border: rgba(45, 212, 191, 0.6);
-  }
-}
-
-.timer__selection {
-  width: 100%;
+.app-header {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 0.3rem;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-sm) var(--space-lg);
+  padding: clamp(0.7rem, 2vh, 1.75rem) clamp(1rem, 3vw, 3rem);
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
 }
 
-.timer__selector-row {
-  display: flex;
-  flex-wrap: nowrap;
-  justify-content: center;
-  /* If more options are added later and the row overflows, keep the first
-     option reachable instead of centering content out of view. */
-  justify-content: safe center;
-  align-items: stretch;
-  gap: clamp(0.35rem, 0.8vw, 0.75rem);
-  width: 100%;
-  max-width: 64rem;
-  overflow-x: auto;
-  padding: 0.1rem;
-  scrollbar-width: thin;
-}
-
-.timer__selector {
-  font: inherit;
-  flex: 0 0 auto;
-  border: 2px solid transparent;
-  border-bottom-width: 3px;
-  border-radius: 0.5rem;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-  line-height: 1.2;
-  padding: 0.35em 0.9em;
-  white-space: nowrap;
-  touch-action: manipulation;
-  transition:
-    border-color 120ms ease,
-    background-color 120ms ease,
-    color 120ms ease;
-}
-
-.timer__selector--mode {
-  font-size: clamp(0.9rem, 1.35vw, 1.05rem);
-  font-weight: 500;
-  letter-spacing: 0.06em;
-}
-
-.timer__selector--mode[data-selected="true"] {
-  font-size: clamp(1.15rem, 2vw, 1.6rem);
-  font-weight: 700;
-}
-
-.timer__selector--preset {
-  font-family: var(--mono);
-  font-variant-numeric: tabular-nums;
-  font-size: clamp(0.8rem, 1.15vw, 0.95rem);
-}
-
-.timer__selector--preset[data-selected="true"] {
-  font-size: clamp(0.9rem, 1.4vw, 1.1rem);
-  font-weight: 700;
-}
-
-/* Selected: filled container, heavier underline and bold text — not colour
-   alone. Inactive options stay readable (--text) and simply smaller. */
-.timer__selector[data-selected="true"] {
-  color: var(--mode-accent);
-  background: var(--mode-accent-bg);
-  border-color: var(--mode-accent-border);
-  border-bottom-color: var(--mode-accent);
-}
-
-.timer__selector:hover:not([aria-disabled="true"]) {
-  border-color: var(--mode-accent-border);
-  background: var(--mode-accent-bg);
-}
-
-.timer__selector:focus-visible {
-  outline: 2px solid var(--mode-accent);
-  outline-offset: 2px;
-}
-
-/* Locked while running or paused. They stay visible and readable, but no
-   hover/action styling invites a tap; a click still yields the notice. */
-.timer__selector[aria-disabled="true"] {
-  cursor: default;
-}
-
-.timer__selector[aria-disabled="true"]:not([data-selected="true"]) {
-  background: transparent;
-  border-color: transparent;
-}
-
-.timer__selector[aria-disabled="true"][data-selected="true"] {
-  color: var(--mode-accent);
-  background: var(--mode-accent-bg);
-  border-color: var(--mode-accent-border);
-  border-bottom-color: var(--mode-accent-border);
-}
-
-.timer__message {
-  /* Two reserved lines: a notice must not move the countdown, even if it wraps
-     on a narrower display. */
-  margin: 0;
-  min-height: 2.8em;
+.app-header__logo {
+  display: block;
+  width: min(55vw, clamp(14rem, 30vw, 60rem));
+  height: auto;
   max-width: 100%;
-  overflow-wrap: anywhere;
-  text-align: center;
-  color: var(--text);
-  font-size: clamp(0.78rem, 1.1vw, 0.95rem);
+  flex: 0 1 auto;
+  /* The supplied artwork is black on white; multiply removes the white field
+     on the white header without altering the black mark. */
+  mix-blend-mode: multiply;
 }
 
-.timer__message--notice {
-  color: var(--mode-accent);
-  font-weight: 600;
-}
-
-.timer__readout {
+.app-clock {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(0.15rem, 0.6vh, 0.5rem);
-  min-height: 0;
-  width: 100%;
+  align-items: flex-end;
+  gap: 0.1rem;
+  min-width: clamp(10rem, 14vw, 20rem);
+  margin-left: auto;
+  text-align: right;
 }
 
-.timer__context {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: baseline;
-  justify-content: center;
-  gap: 0.5rem;
-  min-height: 2.2em;
+.app-clock__date {
+  color: var(--color-text-muted);
+  font-size: clamp(0.65rem, 1vw, 1.5rem);
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  line-height: 1.2;
   white-space: nowrap;
+  text-transform: uppercase;
 }
 
-.timer__mode-context {
-  font-size: clamp(0.9rem, 1.4vw, 1.1rem);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--mode-accent);
-}
-
-.timer__context-separator {
-  color: var(--text);
-}
-
-.timer__phase {
-  font-size: clamp(1.4rem, 2.6vw, 2.2rem);
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  color: var(--mode-accent);
-}
-
-.timer[data-phase="rest"] .timer__phase {
-  color: var(--rest-accent);
-}
-
-.timer__paused {
-  padding: 0.15em 0.55em;
-  border-radius: 0.25rem;
-  background: var(--rest-bg);
-  color: var(--rest-accent);
-  font-size: clamp(0.75rem, 1.1vw, 0.9rem);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.timer__clock {
-  /* Largest element on screen. The min() keeps it from pushing the rest of the
-     layout off a short kiosk viewport. Stable-width digits prevent sideways
-     movement as the value changes. */
-  font-size: clamp(3.25rem, min(19vw, 26vh), 18rem);
-  font-family: var(--mono);
+.app-clock__time-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0.3em;
+  font-size: clamp(1.4rem, 2.5vw, 5.5rem);
   font-weight: 700;
   line-height: 1;
+  color: var(--color-text);
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
-.timer__meta {
+.app-clock__time {
+  min-width: 8ch;
+  text-align: right;
+  letter-spacing: -0.01em;
+}
+
+.app-clock__period {
+  min-width: 2.5ch;
+  font-size: 0.42em;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: left;
+}
+
+/* ---------- Main stage ---------- */
+
+.app-main {
   display: flex;
-  flex-wrap: nowrap;
+  align-items: center;
   justify-content: center;
-  align-items: baseline;
-  gap: 0.4rem 1.2rem;
-  color: var(--text);
-  font-family: var(--mono);
-  font-size: clamp(0.9rem, 1.4vw, 1.15rem);
-  font-variant-numeric: tabular-nums;
+  min-height: 0;
+  padding: var(--space-md) clamp(1rem, 3vw, 3rem);
 }
 
-.timer__round {
-  color: var(--text-h);
-  font-weight: 600;
-}
-
-.timer__controls {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: clamp(0.75rem, 3vw, 2rem);
-}
-
-.timer__control {
+.app-main__stage {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.4rem;
+  justify-content: center;
+  gap: clamp(0.5rem, 1.8vh, 1.5rem);
+  width: 100%;
+  min-height: 0;
 }
 
-.timer__hint {
-  font-size: clamp(0.875rem, 1.5vw, 1.125rem);
-  color: var(--text);
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.5em 1.1em;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  font-size: clamp(0.85rem, 1.4vw, 2.25rem);
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  line-height: 1.1;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.status-badge__dot {
+  width: 0.65em;
+  height: 0.65em;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.status-badge--ready {
+  color: var(--color-ready);
+  background: var(--color-ready-bg);
+  border-color: var(--color-ready-border);
+}
+
+.status-badge--work {
+  color: var(--color-green);
+  background: var(--color-green-bg);
+  border-color: var(--color-green-border);
+}
+
+.status-badge--rest {
+  color: var(--color-rest);
+  background: var(--color-rest-bg);
+  border-color: var(--color-rest-border);
+}
+
+.status-badge--paused {
+  color: var(--color-paused);
+  background: var(--color-paused-bg);
+  border-color: var(--color-paused-border);
+}
+
+.app-countdown {
+  max-width: 100%;
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: max(3.5rem, min(32vw, 48vh));
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.045em;
   text-align: center;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
-.timer__controls button {
+.phase-track {
+  width: min(72vw, 100%);
+  height: clamp(0.3rem, 0.55vh, 0.75rem);
+  flex: 0 0 auto;
+  overflow: hidden;
+  background: #dfe6ee;
+  border-radius: var(--radius-pill);
+}
+
+.phase-track__fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--color-ready);
+  border-radius: inherit;
+  transition: width 250ms linear;
+}
+
+.phase-track--work .phase-track__fill {
+  background: var(--color-green);
+}
+
+.phase-track--rest .phase-track__fill {
+  background: var(--color-rest);
+}
+
+.phase-track--paused .phase-track__fill {
+  background: var(--color-paused);
+}
+
+/* ---------- Secondary information card ---------- */
+
+.timer-card {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(0.4rem, 1vh, 0.8rem);
+  width: min(78%, 100%);
+  padding: clamp(0.65rem, 1.6vh, 1.25rem) clamp(0.9rem, 2vw, 1.75rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.timer-card__selectors {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-sm) var(--space-md);
+}
+
+.selector-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.selector-label {
+  color: var(--color-text-muted);
+  font-size: clamp(0.62rem, 0.8vw, 1rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.selector-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.selector-chip {
   font: inherit;
-  font-size: clamp(1rem, 2.5vw, 1.75rem);
-  padding: 0.6em 1.6em;
-  border: 2px solid var(--border);
-  border-radius: 0.5rem;
-  color: var(--mode-accent);
-  /* At rest --main-hold is 0%, so this is exactly --mode-accent-bg. During a
-     physical press the fill grows to show progress towards reset. */
-  background: linear-gradient(
-    to right,
-    var(--mode-accent-border) var(--main-hold, 0%),
-    var(--mode-accent-bg) var(--main-hold, 0%)
-  );
+  padding: 0.4em 0.8em;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-subtle);
+  color: var(--color-text-secondary);
+  font-size: clamp(0.75rem, 1.05vw, 2rem);
+  line-height: 1.15;
+  white-space: nowrap;
   cursor: pointer;
-  transition: border-color 0.2s;
-
-  /* Keeps the browser from spending a double-tap-to-zoom delay on taps. */
   touch-action: manipulation;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
 }
 
-.timer__controls button:hover:not([aria-disabled="true"]) {
-  border-color: var(--mode-accent-border);
+.selector-chip[data-selected="true"] {
+  color: var(--color-green-strong);
+  background: var(--color-green-bg);
+  border-color: var(--color-green-border);
+  font-weight: 800;
+  box-shadow: inset 0 -0.14em 0 var(--color-green);
 }
 
-/* Immediate, CSS-only feedback that the press registered. This shows while the
-   button is held and disappears on release or cancellation. */
-.timer__controls button:active:not([aria-disabled="true"]) {
-  border-color: var(--mode-accent);
-  transform: translateY(1px);
+.selector-chip:hover:not([aria-disabled="true"]) {
+  border-color: var(--color-border-strong);
+  background: var(--color-surface-strong);
 }
 
-/* The green physical button is down: echo the same pressed look on screen. */
-.timer__controls button[data-main-held="true"] {
-  border-color: var(--mode-accent);
-  transform: translateY(1px);
-}
-
-.timer__controls button:focus-visible {
-  outline: 2px solid var(--mode-accent);
-  outline-offset: 2px;
-}
-
-/* Mode is shown as unavailable while a session is in flight. It stays
-   focusable — disabling it would blur whatever the operator was focused on. */
-.timer__controls button:disabled,
-.timer__controls button[aria-disabled="true"] {
-  opacity: 0.4;
+.selector-chip[aria-disabled="true"] {
   cursor: default;
 }
 
-/*
- * Physical panel status and hint. Kept small and muted so it never competes
- * with the countdown; --text stays above the 4.5:1 WCAG AA contrast minimum.
- */
-.timer__gamepad {
+.selector-chip[aria-disabled="true"]:not([data-selected="true"]) {
+  background: var(--color-surface-subtle);
+  border-color: var(--color-border);
+}
+
+.selector-chip:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.timer-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem 1rem;
+  min-height: 1.6em;
+  color: var(--color-text-secondary);
+  font-size: clamp(0.75rem, 1vw, 1.75rem);
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  line-height: 1.3;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.meta-item {
+  white-space: nowrap;
+}
+
+.meta-separator {
+  color: var(--color-border-strong);
+}
+
+.timer-card__notice {
+  color: var(--color-paused);
+  font-weight: 800;
+}
+
+/* ---------- Control bar ---------- */
+
+.app-footer {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 0.1rem;
-  text-align: center;
-  color: var(--text);
-  font-size: clamp(0.8rem, 1.1vw, 1rem);
+  align-items: stretch;
+  gap: clamp(0.25rem, 0.8vh, 0.6rem);
+  padding: clamp(0.6rem, 1.8vh, 1.5rem) clamp(1rem, 3vw, 3rem)
+    clamp(0.5rem, 1.2vh, 1rem);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border);
 }
 
-.timer__gamepad-status {
+.app-footer__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: clamp(0.6rem, 1.4vw, 1.5rem);
+  width: 100%;
+}
+
+.control-button {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  margin: 0 0 0.2rem;
+  overflow: hidden;
+  min-height: clamp(3.75rem, 10vh, 7.5rem);
+  padding: clamp(0.55rem, 1.4vh, 1rem) clamp(0.8rem, 1.8vw, 1.75rem);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
-/* Small indicator only: no icon font, no layout shift. */
-.timer__gamepad-status::before {
+.control-button--primary {
+  flex: 1.45 1 26rem;
+  color: var(--color-primary-text);
+  background: var(--color-primary);
+  border-color: #e1b32d;
+  box-shadow: var(--shadow-sm);
+  font-size: clamp(1.2rem, 2.3vw, 4.5rem);
+}
+
+.control-button--mode {
+  flex: 1 1 20rem;
+  color: var(--color-text);
+  background: var(--color-secondary);
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-sm);
+  font-size: clamp(1rem, 1.8vw, 3.5rem);
+}
+
+/* Full-height, left-to-right hold-to-reset shade. The label and hint sit above
+   it and never move; the button keeps its border, radius and focus ring. */
+.control-button--primary::before {
   content: "";
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: var(--border);
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--main-hold, 0%);
+  background: var(--color-primary-progress);
+  border-radius: inherit;
+  pointer-events: none;
+  transition: width 60ms linear;
 }
 
-.timer__gamepad-status--connected::before {
-  background: #2f9e5f;
+.control-button__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: clamp(0.5rem, 1vw, 1.1rem);
+  width: 100%;
+  min-width: 0;
 }
 
-.timer__gamepad-hint {
+.control-button__icon {
+  display: inline-flex;
+  width: 1.05em;
+  height: 1.05em;
+  flex: 0 0 auto;
+}
+
+.control-button__icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.control-button__text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1em;
+  min-width: 0;
+}
+
+.control-button__label {
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.control-button__hint {
+  font-size: clamp(0.62rem, 0.85vw, 1.25rem);
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.control-button--primary .control-button__hint {
+  color: rgba(23, 18, 5, 0.68);
+}
+
+.control-button--mode .control-button__hint {
+  color: var(--color-text-muted);
+}
+
+.control-button--primary:hover {
+  background: var(--color-primary-hover);
+}
+
+.control-button--mode:hover:not([aria-disabled="true"]) {
+  background: var(--color-secondary-hover);
+  border-color: var(--color-text-muted);
+}
+
+.control-button--primary[data-main-held="true"] {
+  border-color: var(--color-primary-text);
+}
+
+.control-button--mode[aria-disabled="true"] {
+  color: var(--color-text-muted);
+  background: var(--color-surface-strong);
+  border-color: var(--color-border);
+  cursor: default;
+}
+
+.control-button:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 3px;
+}
+
+.controller-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
   margin: 0;
+  color: var(--color-text-muted);
+  font-size: clamp(0.65rem, 0.85vw, 1.1rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.03em;
+}
+
+.controller-status__dot {
+  width: 0.5em;
+  height: 0.5em;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--color-border-strong);
+}
+
+.controller-status--connected .controller-status__dot {
+  background: var(--color-green);
+}
+
+.controller-status--disconnected .controller-status__dot {
+  background: var(--color-paused);
+}
+
+/* ---------- Compact / narrow adaptations ---------- */
+
+@media (max-height: 800px) {
+  .app-header {
+    padding: 0.5rem 1rem;
+  }
+
+  .app-header__logo {
+    width: min(50vw, 22rem);
+  }
+
+  .app-clock__time-row {
+    font-size: clamp(1.1rem, 2.2vw, 1.8rem);
+  }
+
+  .app-clock__date {
+    font-size: clamp(0.6rem, 0.9vw, 0.8rem);
+  }
+
+  .app-main {
+    padding: 0.5rem 1rem;
+  }
+
+  .app-main__stage {
+    gap: 0.45rem;
+  }
+
+  .app-countdown {
+    font-size: max(3.25rem, min(30vw, 40vh));
+  }
+
+  .status-badge {
+    font-size: clamp(0.75rem, 1.2vw, 1.1rem);
+    padding: 0.4em 0.9em;
+  }
+
+  .timer-card {
+    width: min(86%, 100%);
+    padding: 0.5rem 0.75rem;
+  }
+
+  .selector-chip {
+    font-size: clamp(0.7rem, 1vw, 0.95rem);
+  }
+
+  .timer-card__meta {
+    font-size: clamp(0.7rem, 0.95vw, 0.95rem);
+  }
+
+  .app-footer {
+    padding: 0.45rem 1rem 0.4rem;
+  }
+
+  .control-button {
+    min-height: clamp(3rem, 9vh, 4.5rem);
+    padding: 0.35rem 0.75rem;
+  }
+
+  .control-button--primary {
+    font-size: clamp(1rem, 1.8vw, 1.6rem);
+  }
+
+  .control-button--mode {
+    font-size: clamp(0.9rem, 1.5vw, 1.4rem);
+  }
+
+  .control-button__hint {
+    font-size: clamp(0.58rem, 0.75vw, 0.75rem);
+  }
+}
+
+@media (max-width: 700px) {
+  .app-header {
+    gap: 0.35rem 0.75rem;
+    padding: 0.55rem 0.75rem;
+  }
+
+  .app-header__logo {
+    width: min(56vw, 14rem);
+  }
+
+  .app-clock {
+    min-width: 0;
+  }
+
+  .app-clock__time-row {
+    font-size: clamp(1.05rem, 4.6vw, 1.5rem);
+  }
+
+  .app-clock__date {
+    font-size: 0.62rem;
+  }
+
+  .app-main {
+    padding: 0.6rem 0.75rem;
+  }
+
+  .app-countdown {
+    font-size: max(3.5rem, min(34vw, 30vh));
+  }
+
+  .timer-card {
+    width: 100%;
+  }
+
+  .timer-card__selectors {
+    justify-content: flex-start;
+  }
+
+  .app-footer__controls {
+    gap: 0.5rem;
+  }
+
+  .control-button--primary,
+  .control-button--mode {
+    flex-basis: 100%;
+  }
+
+  .control-button {
+    min-height: 3.5rem;
+  }
+
+  .controller-status {
+    justify-content: flex-start;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .timer__selector,
-  .timer__controls button {
+  .selector-chip,
+  .control-button,
+  .control-button--primary::before,
+  .phase-track__fill {
     transition: none;
   }
 }

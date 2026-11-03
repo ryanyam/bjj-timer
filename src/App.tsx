@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useReducer,
   useRef,
@@ -10,21 +11,26 @@ import { formatRemaining } from "./timer";
 import { createPressRecogniser, type PressRecogniser } from "./press";
 import {
   currentMode,
+  currentPreset,
   currentPresetIndex,
   displayMs,
   initialRoundState,
   mainLabel,
   nextPhase,
-  phaseLabel,
+  phaseProgress,
   reduce,
   selectionAllowed,
   stateKey,
+  statusLabel,
+  statusTone,
 } from "./round";
 import {
   TRAINING_MODES,
   compactPresetLabel,
   fullPresetLabel,
 } from "./training";
+import { LiveClock } from "./LiveClock";
+import logoUrl from "./assets/alliance-jiu-jitsu-manila.jpg";
 import { playRestStart, playWorkStart, unlockAudio } from "./audio";
 import { useGamepadInput, type GamepadStatus } from "./useGamepadInput";
 import { MAIN_BUTTON_HOLD_MS, MODE_BUTTON_HOLD_MS } from "./gamepad";
@@ -40,6 +46,9 @@ const TICK_MS = 250;
 /** How long the non-blocking selection notice stays on screen. */
 const NOTICE_MS = 2_200;
 
+/** Refresh rate for the pointer/touch hold-progress fill. */
+const POINTER_HOLD_PROGRESS_MS = 50;
+
 const GAMEPAD_STATUS_TEXT: Record<GamepadStatus, string> = {
   connected: "Controller connected",
   waiting: "Waiting for controller input",
@@ -53,9 +62,73 @@ function App() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const mode = currentMode(state);
+  const preset = currentPreset(state);
   const presetIndex = currentPresetIndex(state);
   const preview = nextPhase(state);
   const canSelect = selectionAllowed(state);
+  const tone = statusTone(state);
+  const phasePercent = phaseProgress(state, now);
+
+  /*
+   * Pointer/touch hold progress uses the same threshold and clock-based timing
+   * as the reset recogniser. The controller reports its own progress from the
+   * gamepad hook; the button displays the larger of the two so either input
+   * shows the same fill.
+   */
+  const [pointerHoldProgress, setPointerHoldProgress] = useState(0);
+  const pointerHoldStartedAt = useRef<number | null>(null);
+  const pointerHoldTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearPointerHoldTimer = useCallback(() => {
+    if (pointerHoldTimer.current !== null) {
+      clearInterval(pointerHoldTimer.current);
+      pointerHoldTimer.current = null;
+    }
+
+    pointerHoldStartedAt.current = null;
+  }, []);
+
+  const stopPointerHold = useCallback(() => {
+    clearPointerHoldTimer();
+    setPointerHoldProgress(0);
+  }, [clearPointerHoldTimer]);
+
+  const startPointerHold = useCallback(() => {
+    if (pointerHoldStartedAt.current !== null) {
+      return;
+    }
+
+    pointerHoldStartedAt.current = Date.now();
+    setPointerHoldProgress(0);
+
+    pointerHoldTimer.current = setInterval(() => {
+      const startedAt = pointerHoldStartedAt.current;
+
+      if (startedAt === null) {
+        return;
+      }
+
+      const progress = Math.min(
+        1,
+        (Date.now() - startedAt) / MAIN_BUTTON_HOLD_MS,
+      );
+
+      // Stop sampling and clear at the threshold, when the reset recogniser
+      // fires. Keep the start time until release/reset so a repeated
+      // pointerdown while held cannot restart the visual fill.
+      if (progress >= 1) {
+        if (pointerHoldTimer.current !== null) {
+          clearInterval(pointerHoldTimer.current);
+          pointerHoldTimer.current = null;
+        }
+
+        setPointerHoldProgress(0);
+        return;
+      }
+
+      setPointerHoldProgress(progress);
+    }, POINTER_HOLD_PROGRESS_MS);
+  }, []);
 
   /*
    * Main short press. Shared by the green arcade button and the on-screen
@@ -142,6 +215,11 @@ function App() {
     stateKey: stateKey(state),
   });
 
+  const mainHoldProgress = Math.max(
+    pointerHoldProgress,
+    gamepad.mainHoldProgress,
+  );
+
   useEffect(() => {
     if (state.status !== "running" || state.deadline === null) {
       return;
@@ -219,6 +297,7 @@ function App() {
     const cancelPresses = () => {
       mainPress.cancel();
       modePress.cancel();
+      stopPointerHold();
     };
 
     // Losing focus abandons a press in flight: the operator has looked away, and
@@ -227,160 +306,221 @@ function App() {
 
     return () => {
       window.removeEventListener("blur", cancelPresses);
-      // Unmount: drop any outstanding hold without firing anything.
-      cancelPresses();
+      // Unmount: drop any outstanding hold without firing anything, and clear
+      // the progress sampler without scheduling another render.
+      mainPress.cancel();
+      modePress.cancel();
+      clearPointerHoldTimer();
     };
-  }, [mainPress, modePress]);
+  }, [mainPress, modePress, stopPointerHold, clearPointerHoldTimer]);
 
   return (
-    <main
-      className="timer"
+    <div
+      className="app"
       data-mode={mode.id}
       data-phase={state.phase}
       data-status={state.status}
     >
-      <section className="timer__selection" aria-label="Training selection">
-        <div
-          className="timer__selector-row"
-          role="group"
-          aria-label="Main mode"
-        >
-          {TRAINING_MODES.map((option, index) => {
-            const selected = index === state.modeIndex;
+      <header className="app-header">
+        <img
+          className="app-header__logo"
+          src={logoUrl}
+          alt="Alliance Jiu Jitsu Manila"
+        />
+        <LiveClock />
+      </header>
 
-            return (
-              <button
-                key={option.id}
-                type="button"
-                className="timer__selector timer__selector--mode"
-                data-selected={selected ? "true" : undefined}
-                aria-pressed={selected}
-                aria-disabled={canSelect ? undefined : true}
-                onClick={() => chooseMode(index)}
-              >
-                {option.title}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="timer__selector-row" role="group" aria-label="Preset">
-          {mode.presets.map((option, index) => {
-            const selected = index === presetIndex;
-
-            return (
-              <button
-                key={option.id}
-                type="button"
-                className="timer__selector timer__selector--preset"
-                data-selected={selected ? "true" : undefined}
-                aria-pressed={selected}
-                aria-disabled={canSelect ? undefined : true}
-                onClick={() => choosePreset(index)}
-              >
-                {selected
-                  ? fullPresetLabel(option)
-                  : compactPresetLabel(option)}
-              </button>
-            );
-          })}
-        </div>
-
-        <p
-          className={`timer__message${
-            notice === null ? "" : " timer__message--notice"
-          }`}
-          role="status"
-          aria-live="polite"
-        >
-          {notice ??
-            (canSelect
-              ? "White: preset · Hold white: mode · Green: start"
-              : "Selection locked — hold green to reset")}
-        </p>
-      </section>
-
-      <div className="timer__readout">
-        <div className="timer__context">
-          <span className="timer__mode-context">{mode.title}</span>
-          <span className="timer__context-separator" aria-hidden="true">
-            ·
-          </span>
-          <span className="timer__phase">{phaseLabel(state)}</span>
-          {state.status === "paused" && (
-            <span className="timer__paused">PAUSED</span>
-          )}
-        </div>
-
-        <div className="timer__clock" role="timer">
-          {formatRemaining(displayMs(state, now))}
-        </div>
-
-        <div className="timer__meta">
-          <span className="timer__round">{`ROUND ${state.round}`}</span>
-          <span className="timer__next">
-            {`NEXT: ${preview.label} ${formatRemaining(preview.ms)}`}
-          </span>
-        </div>
-      </div>
-
-      <div className="timer__controls">
-        {/*
-          Main is never disabled. A long hold must keep working while a session
-          runs or is paused, even though the short action changes meaning there.
-        */}
-        <div className="timer__control">
-          <button
-            type="button"
-            aria-describedby="main-hint"
-            data-main-held={gamepad.mainPressed ? "true" : undefined}
-            style={mainHoldStyle(gamepad.mainHoldProgress)}
-            {...pressHandlers(mainPress)}
+      <main className="app-main">
+        <div className="app-main__stage">
+          <span
+            className={`status-badge status-badge--${tone}`}
+            role="status"
+            aria-live="polite"
           >
-            {mainLabel(state)}
-          </button>
-          <span className="timer__hint" id="main-hint">
-            Hold to reset
+            <span className="status-badge__dot" aria-hidden="true" />
+            {statusLabel(state)}
           </span>
-        </div>
 
-        {/*
-          Mode stays visible and focusable. While a session is in flight the
-          reducer refuses its selections and records the attempt for the notice.
-        */}
-        <div className="timer__control">
+          <div className="app-countdown" role="timer">
+            {formatRemaining(displayMs(state, now))}
+          </div>
+
+          <div
+            className={`phase-track phase-track--${tone}`}
+            aria-hidden="true"
+          >
+            <span
+              className="phase-track__fill"
+              style={{ width: `${phasePercent * 100}%` }}
+            />
+          </div>
+
+          <section
+            className="timer-card"
+            aria-label="Mode, preset and round details"
+          >
+            <div className="timer-card__selectors">
+              <div className="selector-group">
+                <span className="selector-label">MODE</span>
+                <div
+                  className="selector-row"
+                  role="group"
+                  aria-label="Main mode"
+                >
+                  {TRAINING_MODES.map((option, index) => {
+                    const selected = index === state.modeIndex;
+
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className="selector-chip selector-chip--mode"
+                        data-selected={selected ? "true" : undefined}
+                        aria-pressed={selected}
+                        aria-disabled={canSelect ? undefined : true}
+                        onClick={() => chooseMode(index)}
+                      >
+                        {option.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="selector-group">
+                <span className="selector-label">PRESET</span>
+                <div className="selector-row" role="group" aria-label="Preset">
+                  {mode.presets.map((option, index) => {
+                    const selected = index === presetIndex;
+
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className="selector-chip selector-chip--preset"
+                        data-selected={selected ? "true" : undefined}
+                        aria-pressed={selected}
+                        aria-disabled={canSelect ? undefined : true}
+                        onClick={() => choosePreset(index)}
+                      >
+                        {selected
+                          ? fullPresetLabel(option)
+                          : compactPresetLabel(option)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="timer-card__meta">
+              {notice !== null ? (
+                <span
+                  className="timer-card__notice"
+                  role="status"
+                  aria-live="polite"
+                >
+                  {notice}
+                </span>
+              ) : (
+                <>
+                  <span className="meta-item">{`ROUND ${state.round}`}</span>
+                  <span className="meta-separator" aria-hidden="true">
+                    ·
+                  </span>
+                  <span className="meta-item">
+                    {`NEXT: ${preview.label} ${formatRemaining(preview.ms)}`}
+                  </span>
+                  <span className="meta-separator" aria-hidden="true">
+                    ·
+                  </span>
+                  <span className="meta-item">{fullPresetLabel(preset)}</span>
+                </>
+              )}
+            </div>
+          </section>
+        </div>
+      </main>
+
+      <footer className="app-footer">
+        <div className="app-footer__controls">
           <button
             type="button"
-            aria-disabled={canSelect ? undefined : true}
+            className="control-button control-button--primary"
+            aria-label={mainLabel(state)}
+            aria-describedby="primary-hint"
+            data-main-held={gamepad.mainPressed ? "true" : undefined}
+            style={mainHoldStyle(mainHoldProgress)}
+            onPointerDown={() => {
+              startPointerHold();
+              mainPress.pressDown();
+            }}
+            onPointerUp={() => {
+              mainPress.pressUp();
+              stopPointerHold();
+            }}
+            onPointerLeave={() => {
+              mainPress.cancel();
+              stopPointerHold();
+            }}
+            onPointerCancel={() => {
+              mainPress.cancel();
+              stopPointerHold();
+            }}
+            onClick={(event) => {
+              if (event.detail !== 0) {
+                return;
+              }
+
+              mainPress.pressDown();
+              mainPress.pressUp();
+            }}
+          >
+            <span className="control-button__content">
+              <span className="control-button__icon" aria-hidden="true">
+                {mainLabel(state) === "Pause" ? <PauseIcon /> : <PlayIcon />}
+              </span>
+              <span className="control-button__text">
+                <span className="control-button__label">
+                  {mainLabel(state).toUpperCase()}
+                </span>
+                <span className="control-button__hint" id="primary-hint">
+                  Hold to reset
+                </span>
+              </span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="control-button control-button--mode"
+            aria-label="Mode"
             aria-describedby="mode-hint"
+            aria-disabled={canSelect ? undefined : true}
             {...pressHandlers(modePress)}
           >
-            Mode
+            <span className="control-button__content">
+              <span className="control-button__icon" aria-hidden="true">
+                <ModeIcon />
+              </span>
+              <span className="control-button__text">
+                <span className="control-button__label">MODE</span>
+                <span className="control-button__hint" id="mode-hint">
+                  {canSelect
+                    ? "Press: preset · Hold: mode"
+                    : "Locked until reset"}
+                </span>
+              </span>
+            </span>
           </button>
-          <span className="timer__hint" id="mode-hint">
-            {canSelect ? "Press: preset · Hold: mode" : "Locked until reset"}
-          </span>
         </div>
-      </div>
 
-      {/*
-        The physical panel's help. Quiet by design: the countdown stays the
-        dominant element, and none of this is an interactive control.
-      */}
-      <footer className="timer__gamepad">
-        <p
-          className={`timer__gamepad-status timer__gamepad-status--${gamepad.status}`}
-        >
+        <p className={`controller-status controller-status--${gamepad.status}`}>
+          <span className="controller-status__dot" aria-hidden="true" />
           {GAMEPAD_STATUS_TEXT[gamepad.status]}
         </p>
-        <p className="timer__gamepad-hint">
-          Green: Start / Pause / Resume · Hold to reset
-        </p>
-        <p className="timer__gamepad-hint">
-          White: Press for preset · Hold for mode
-        </p>
       </footer>
-    </main>
+    </div>
   );
 }
 
@@ -390,6 +530,40 @@ function App() {
  */
 function mainHoldStyle(progress: number): CSSProperties {
   return { "--main-hold": `${Math.round(progress * 100)}%` } as CSSProperties;
+}
+
+function PlayIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M8 5v14l11-7z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function PauseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M6 5h4v14H6zM14 5h4v14h-4z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function ModeIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M20 11a8 8 0 0 0-14.9-4M4 5v5h5" />
+      <path d="M4 13a8 8 0 0 0 14.9 4M20 19v-5h-5" />
+    </svg>
+  );
 }
 
 /**

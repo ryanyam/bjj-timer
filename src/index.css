@@ -1,30 +1,67 @@
 /*
- * Global tokens and page frame.
+ * Design tokens and page frame.
  *
- * Kept deliberately small. The starter's demo rules (hero cluster, feature
- * grid, code blocks, headings, the framed #root column) are removed rather than
- * left in place to be overridden. The page-level frame lives here and the
- * timer's own rules live in App.css, so "which rule wins" never depends on the
- * order the two files happen to be imported in.
+ * The timer is a light, TV-first interface. Semantic tokens are shared by the
+ * header, stage, card and footer so surfaces, borders and interaction states
+ * stay consistent. No UI framework is used.
  */
 
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
+  --font-sans:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
 
-  --sans: system-ui, "Segoe UI", Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  --color-page: #f2f5f8;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #f7f9fb;
+  --color-surface-strong: #eef2f6;
+  --color-text: #0b1220;
+  --color-text-secondary: #475467;
+  --color-text-muted: #667085;
+  --color-border: #e3e8ee;
+  --color-border-strong: #cfd7e2;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
+  --color-green: #137a46;
+  --color-green-strong: #0d6038;
+  --color-green-bg: #e7f5ec;
+  --color-green-border: #b9e2c8;
+  --color-rest: #1d4ed8;
+  --color-rest-bg: #e9efff;
+  --color-rest-border: #c3d4ff;
+  --color-paused: #9a5b06;
+  --color-paused-bg: #fff4d9;
+  --color-paused-border: #f0d28c;
+  --color-ready: #475467;
+  --color-ready-bg: #eef1f5;
+  --color-ready-border: #d7dee7;
+
+  --color-primary: #f5c84c;
+  --color-primary-hover: #f8d166;
+  --color-primary-progress: #d88e0c;
+  --color-primary-text: #171205;
+  --color-secondary: #ffffff;
+  --color-secondary-hover: #f7f9fb;
+  --color-focus: #0b1220;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.875rem;
+  --radius-lg: 1.25rem;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow-md: 0 0.75rem 2rem rgba(16, 24, 40, 0.08);
+
+  --space-xs: clamp(0.25rem, 0.6vh, 0.5rem);
+  --space-sm: clamp(0.5rem, 1.2vh, 0.9rem);
+  --space-md: clamp(0.75rem, 2vh, 1.5rem);
+  --space-lg: clamp(1rem, 3vh, 2.5rem);
+  --space-xl: clamp(1.5rem, 4vh, 4rem);
+
+  color-scheme: light;
+  font: 18px/1.45 var(--font-sans);
+  color: var(--color-text);
+  background: var(--color-page);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -35,30 +72,13 @@
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-  }
-}
-
-/* Kiosk frame: fill the screen exactly once, and never scroll. */
 html,
-body {
+body,
+#root {
   height: 100%;
-  overflow: hidden;
 }
 
 body {
   margin: 0;
-}
-
-/* The timer sizes itself against this, so it must have a definite height. */
-#root {
-  height: 100%;
+  background: var(--color-page);
 }

@@ -12,7 +12,6 @@
 
 import { remainingMs } from "./timer";
 import {
-  DEFAULT_PRESET_INDEX,
   TRAINING_MODES,
   modeAt,
   presetAt,
@@ -84,7 +83,7 @@ export const initialRoundState: RoundState = {
   status: "ready",
   phase: "work",
   modeIndex: 0,
-  presetIndexByMode: TRAINING_MODES.map(() => DEFAULT_PRESET_INDEX),
+  presetIndexByMode: TRAINING_MODES.map((mode) => mode.defaultPresetIndex),
   round: 1,
   deadline: null,
   pausedAt: null,
@@ -98,7 +97,10 @@ export function currentMode(state: RoundState): TrainingMode {
 }
 
 export function currentPresetIndex(state: RoundState): number {
-  return state.presetIndexByMode[state.modeIndex] ?? DEFAULT_PRESET_INDEX;
+  return (
+    state.presetIndexByMode[state.modeIndex] ??
+    currentMode(state).defaultPresetIndex
+  );
 }
 
 export function currentPreset(state: RoundState): Preset {
@@ -417,10 +419,11 @@ function selectModeAt(state: RoundState, modeIndex: number): RoundState {
     return state;
   }
 
-  // A mode change starts on that mode's first preset. Per-mode memory is kept
-  // for the current session but is not restored when switching modes.
+  // A mode change starts on that mode's declared default preset. Per-mode
+  // memory is kept for the current session but is not restored on entry.
+  const defaultPreset = modeAt(modeIndex).defaultPresetIndex;
   const presetIndexByMode = state.presetIndexByMode.map((value, index) =>
-    index === modeIndex ? DEFAULT_PRESET_INDEX : value,
+    index === modeIndex ? defaultPreset : value,
   );
 
   return readySelection(state, modeIndex, presetIndexByMode);

@@ -91,7 +91,13 @@ function phaseHeadlineText(): string {
 
 function modeContextText(): string {
   const mode = document.querySelector(".app")?.getAttribute("data-mode");
-  return mode === "drills" ? "DRILLS" : mode === "kids" ? "KIDS" : "ROLLS";
+  return mode === "drills"
+    ? "DRILLS"
+    : mode === "nogi"
+      ? "NOGI"
+      : mode === "kids"
+        ? "KIDS"
+        : "ROLLS";
 }
 
 function roundText(): string {
@@ -158,7 +164,9 @@ function presetRow(): HTMLElement {
   return screen.getByRole("group", { name: "Preset" });
 }
 
-function modeOption(name: "ROLLS" | "DRILLS" | "KIDS"): HTMLElement {
+function modeOption(
+  name: "ROLLS" | "DRILLS" | "NOGI" | "KIDS",
+): HTMLElement {
   return within(modeRow()).getByRole("button", { name });
 }
 
@@ -221,7 +229,7 @@ function pressModeLong(): void {
   longPress(modeButton(), MODE_BUTTON_HOLD_MS);
 }
 
-function selectMode(name: "ROLLS" | "DRILLS" | "KIDS"): void {
+function selectMode(name: "ROLLS" | "DRILLS" | "NOGI" | "KIDS"): void {
   fireEvent.click(modeOption(name));
 }
 
@@ -248,6 +256,7 @@ beforeEach(() => {
   resetGetReadySettings();
   setGetReadySecondsForMode("rolls", 0);
   setGetReadySecondsForMode("drills", 0);
+  setGetReadySecondsForMode("nogi", 0);
   setGetReadySecondsForMode("kids", 0);
 });
 
@@ -334,6 +343,7 @@ describe("Get Ready countdown", () => {
 
   it("starts immediately when the configured duration is zero", () => {
     setGetReadySecondsForMode("drills", 0);
+  setGetReadySecondsForMode("nogi", 0);
   setGetReadySecondsForMode("kids", 0);
     render(<App />);
     selectMode("DRILLS");
@@ -447,13 +457,16 @@ describe("the initial selection", () => {
     expect(options.map((button) => button.textContent?.trim())).toEqual([
       "ROLLS",
       "DRILLS",
+      "NOGI",
       "KIDS",
     ]);
     expect(modeOption("ROLLS").getAttribute("aria-pressed")).toBe("true");
     expect(modeOption("DRILLS").getAttribute("aria-pressed")).toBe("false");
+    expect(modeOption("NOGI").getAttribute("aria-pressed")).toBe("false");
     expect(modeOption("KIDS").getAttribute("aria-pressed")).toBe("false");
     expect(modeOption("ROLLS").getAttribute("data-selected")).toBe("true");
     expect(modeOption("DRILLS").getAttribute("data-selected")).toBeNull();
+    expect(modeOption("NOGI").getAttribute("data-selected")).toBeNull();
     expect(modeOption("KIDS").getAttribute("data-selected")).toBeNull();
   });
 
@@ -581,6 +594,12 @@ describe("the Mode button and keyboard selection", () => {
 
     pressModeLong();
 
+    expect(modeContextText()).toBe("NOGI");
+    expect(clockText()).toBe("3:00");
+    expect(activePreset().textContent?.trim()).toBe("3:00 / 0:10");
+
+    pressModeLong();
+
     expect(modeContextText()).toBe("KIDS");
     expect(clockText()).toBe("0:30");
 
@@ -588,6 +607,53 @@ describe("the Mode button and keyboard selection", () => {
 
     expect(modeContextText()).toBe("ROLLS");
     expect(clockText()).toBe("5:00");
+  });
+
+  it("loads NOGI at 3:00 / 0:10 on entry and cycles its presets", () => {
+    render(<App />);
+
+    selectMode("NOGI");
+    expect(modeContextText()).toBe("NOGI");
+    expect(clockText()).toBe("3:00");
+    expect(nextText()).toBe("NEXT: WORK 3:00");
+    expect(presetLabels()).toEqual([
+      "1:00 / 0:10",
+      "2:00 / 0:10",
+      "3:00 / 0:10",
+      "5:00 / 0:10",
+    ]);
+    expect(activePreset().textContent?.trim()).toBe("3:00 / 0:10");
+
+    const seen: string[] = [clockText()];
+    for (let press = 0; press < 4; press += 1) {
+      pressModeShort();
+      seen.push(clockText());
+    }
+    expect(seen).toEqual(["3:00", "5:00", "1:00", "2:00", "3:00"]);
+
+    selectMode("ROLLS");
+    selectMode("NOGI");
+    expect(clockText()).toBe("3:00");
+  });
+
+  it("runs NOGI work and rest and increments the round after rest", () => {
+    render(<App />);
+    selectMode("NOGI");
+    pressMainShort();
+
+    expect(clockText()).toBe("3:00");
+    expect(phaseText()).toBe("WORK");
+    expect(nextText()).toBe("NEXT: REST 0:10");
+
+    advance(3 * MINUTE);
+    expect(phaseText()).toBe("REST");
+    expect(clockText()).toBe("0:10");
+    expect(nextLabelText()).toBe("GET READY: WORK 3:00");
+
+    advance(10 * SECOND);
+    expect(phaseText()).toBe("WORK");
+    expect(clockText()).toBe("3:00");
+    expect(roundText()).toBe("ROUND 2");
   });
 
   it("cycles the full Drills preset sequence and wraps", () => {
@@ -660,6 +726,11 @@ describe("the Mode button and keyboard selection", () => {
     expect(document.querySelector(".mode-flash")?.textContent).toBe(
       "MODE: DRILLS",
     );
+
+    advance(1_000);
+    selectMode("NOGI");
+    advance(0);
+    expect(document.querySelector(".mode-flash")?.textContent).toBe("MODE: NOGI");
 
     advance(1_000);
     selectMode("KIDS");

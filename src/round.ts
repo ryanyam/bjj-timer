@@ -347,9 +347,14 @@ function onMainShort(
     case "getReady":
       return resetSession(state);
 
-    case "running":
-      // Freeze the current phase by remembering WHEN we paused.
-      return { ...state, status: "paused", pausedAt: now };
+    case "running": {
+      // Reconcile any phase boundaries already crossed by the supplied clock,
+      // then freeze the resulting active phase. Without this, a pause in the
+      // tick gap after a deadline would leave the previous phase paused at 0:00.
+      const reconciled = onTick(state, now);
+
+      return { ...reconciled, status: "paused", pausedAt: now };
+    }
 
     case "paused":
       // Resume from the frozen remainder, keeping the phase and round.

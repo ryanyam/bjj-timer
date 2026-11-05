@@ -192,6 +192,61 @@ describe("the repeating work-rest cycle", () => {
   });
 });
 
+describe("pause around a phase deadline", () => {
+  it("pauses just before the deadline with the tiny remainder intact", () => {
+    const pausedWork = paused(started(T0), T0 + 5 * MINUTE - 1);
+
+    expect(pausedWork.status).toBe("paused");
+    expect(pausedWork.phase).toBe("work");
+    expect(displayMs(pausedWork, T0 + 5 * MINUTE - 1)).toBe(1);
+    expect(pausedWork.transitionSeq).toBe(1);
+  });
+
+  it("reconciles the boundary at the exact deadline before pausing", () => {
+    const pausedRest = paused(started(T0), T0 + 5 * MINUTE);
+
+    expect(pausedRest.status).toBe("paused");
+    expect(pausedRest.phase).toBe("rest");
+    expect(pausedRest.round).toBe(1);
+    expect(pausedRest.deadline).toBe(T0 + 6 * MINUTE);
+    expect(displayMs(pausedRest, T0 + 5 * MINUTE)).toBe(1 * MINUTE);
+    expect(pausedRest.transitionSeq).toBe(2);
+  });
+
+  it("reconciles a boundary crossed before pausing", () => {
+    const pausedRest = paused(started(T0), T0 + 5 * MINUTE + 30 * SECOND);
+
+    expect(pausedRest.phase).toBe("rest");
+    expect(pausedRest.deadline).toBe(T0 + 6 * MINUTE);
+    expect(displayMs(pausedRest, T0 + 5 * MINUTE + 30 * SECOND)).toBe(
+      30 * SECOND,
+    );
+    expect(pausedRest.transitionSeq).toBe(2);
+  });
+
+  it("reconciles multiple skipped boundaries before pausing", () => {
+    const pausedWork = paused(started(T0), T0 + 7 * MINUTE);
+
+    expect(pausedWork.status).toBe("paused");
+    expect(pausedWork.phase).toBe("work");
+    expect(pausedWork.round).toBe(2);
+    expect(pausedWork.deadline).toBe(T0 + 11 * MINUTE);
+    expect(displayMs(pausedWork, T0 + 7 * MINUTE)).toBe(4 * MINUTE);
+    expect(pausedWork.transitionSeq).toBe(3);
+  });
+
+  it("resumes from the reconciled remainder rather than the old deadline", () => {
+    const pausedWork = paused(started(T0), T0 + 7 * MINUTE);
+    const resumed = paused(pausedWork, T0 + 10 * MINUTE);
+
+    expect(resumed.status).toBe("running");
+    expect(resumed.phase).toBe("work");
+    expect(resumed.round).toBe(2);
+    expect(resumed.deadline).toBe(T0 + 14 * MINUTE);
+    expect(displayMs(resumed, T0 + 10 * MINUTE)).toBe(4 * MINUTE);
+  });
+});
+
 describe("pause and resume", () => {
   it("freezes and resumes work from its remaining time", () => {
     const work = started(T0);

@@ -35,13 +35,9 @@ import logoUrl from "./assets/alliance-jiu-jitsu-manila.jpg";
 import {
   initializeAudio,
   onAudioUnavailable,
-  playModeChange,
-  playPause,
-  playPresetChange,
-  playReset,
   playRestStart,
-  playResume,
   playWorkStart,
+  stopRoundCues,
   unlockAudio,
 } from "./audio";
 import { useGamepadInput } from "./useGamepadInput";
@@ -154,6 +150,7 @@ function App() {
    */
   const [modeHoldProgress, setModeHoldProgress] = useState(0);
   const [pointerModePressed, setPointerModePressed] = useState(false);
+  const [pointerModeCancelled, setPointerModeCancelled] = useState(false);
   const modeHoldStartedAt = useRef<number | null>(null);
   const modeHoldTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -213,6 +210,38 @@ function App() {
    * action. `fromState` is supplied by the physical button, which can be held
    * across a phase transition; the reducer refuses a stale action.
    */
+  const cyclePreset = () => {
+    unlockAudio();
+    dispatch({ type: "nextPreset" });
+  };
+
+  const cycleMode = () => {
+    unlockAudio();
+    dispatch({ type: "nextMode" });
+  };
+
+  const [modePress] = useState(() =>
+    createPressRecogniser({
+      longPressMs: MODE_BUTTON_HOLD_MS,
+      onPress: (kind) => {
+        // Same mapping as the white arcade button: short cycles the preset,
+        // hold cycles the main mode. The reducer enforces Ready-only selection.
+        if (kind === "long") {
+          cycleMode();
+        } else {
+          cyclePreset();
+        }
+      },
+    }),
+  );
+
+  const cancelPointerMode = () => {
+    setPointerModeCancelled(true);
+    modePress.cancel();
+    setPointerModePressed(false);
+    stopModeHold();
+  };
+
   const mainShort = (fromState?: string) => {
     unlockAudio();
     const reading = Date.now();
@@ -233,17 +262,7 @@ function App() {
     setNow(reading);
     dispatch({ type: "mainLong", now: reading });
     setResetFlash(true);
-    playReset();
-  };
-
-  const cyclePreset = () => {
-    unlockAudio();
-    dispatch({ type: "nextPreset" });
-  };
-
-  const cycleMode = () => {
-    unlockAudio();
-    dispatch({ type: "nextMode" });
+    stopRoundCues();
   };
 
   const chooseMode = (modeIndex: number) => {
@@ -286,24 +305,15 @@ function App() {
     };
   });
 
-  const [modePress] = useState(() =>
-    createPressRecogniser({
-      longPressMs: MODE_BUTTON_HOLD_MS,
-      onPress: (kind) => {
-        // Same mapping as the white arcade button: short cycles the preset,
-        // hold cycles the main mode. The reducer enforces Ready-only selection.
-        if (kind === "long") {
-          cycleMode();
-        } else {
-          cyclePreset();
-        }
-      },
-    }),
-  );
-
   const gamepad = useGamepadInput({
-    onMain: mainShort,
-    onMainHold: mainLong,
+    onMain: (fromState) => {
+      cancelPointerMode();
+      mainShort(fromState);
+    },
+    onMainHold: () => {
+      cancelPointerMode();
+      mainLong();
+    },
     onOption: cyclePreset,
     onMode: cycleMode,
     stateKey: stateKey(state),
@@ -313,12 +323,14 @@ function App() {
     pointerHoldProgress,
     gamepad.mainHoldProgress,
   );
-  const effectiveModeHoldProgress = Math.max(
-    modeHoldProgress,
-    canSelect ? gamepad.modeHoldProgress : 0,
-  );
+  const pointerModeProgress =
+    canSelect && !pointerModeCancelled ? modeHoldProgress : 0;
+  const effectiveModeHoldProgress = canSelect
+    ? Math.max(pointerModeProgress, gamepad.modeHoldProgress)
+    : 0;
   const modePressed =
-    (canSelect && pointerModePressed) || gamepad.modePressed;
+    (canSelect && !pointerModeCancelled && pointerModePressed) ||
+    gamepad.modePressed;
 
   const copy = controlCopy(state, {
     holding: mainHoldProgress > 0 && !resetFlash,
@@ -383,33 +395,6 @@ function App() {
     }
   }, [state.transitionSeq, state.status, state.lastTransition]);
 
-  const previousPlaybackStatus = useRef(state.status);
-
-  useEffect(() => {
-    const previous = previousPlaybackStatus.current;
-    previousPlaybackStatus.current = state.status;
-
-    if (previous === "running" && state.status === "paused") {
-      playPause();
-    } else if (previous === "paused" && state.status === "running") {
-      playResume();
-    }
-  }, [state.status]);
-
-  const previousPreset = useRef(presetIndex);
-  const previousPresetMode = useRef(mode.id);
-
-  useEffect(() => {
-    const modeChanged = mode.id !== previousPresetMode.current;
-    const presetChanged = presetIndex !== previousPreset.current;
-    previousPresetMode.current = mode.id;
-    previousPreset.current = presetIndex;
-
-    if (presetChanged && !modeChanged) {
-      playPresetChange();
-    }
-  }, [presetIndex, mode.id]);
-
   useEffect(() => {
     let active = true;
     const unsubscribe = onAudioUnavailable(() => {
@@ -443,7 +428,6 @@ function App() {
     }
 
     previousMode.current = mode.id;
-    playModeChange();
 
     const showId = setTimeout(() => setModeFlash(`MODE: ${mode.title}`), 0);
     const hideId = setTimeout(() => setModeFlash(null), 1_000);
@@ -682,6 +666,7 @@ function App() {
             data-holding={mainHoldProgress > 0 ? "true" : undefined}
             style={mainHoldStyle(mainHoldProgress)}
             onPointerDown={() => {
+              cancelPointerMode();
               startPointerHold();
               mainPress.pressDown(stateKey(state));
             }}
@@ -737,6 +722,7 @@ function App() {
             {...(canSelect
               ? {
                   onPointerDown: () => {
+                    setPointerModeCancelled(false);
                     setPointerModePressed(true);
                     startModeHold();
                     modePress.pressDown();

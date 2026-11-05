@@ -15,6 +15,7 @@ vi.mock("./audio", () => ({
   playResume: vi.fn(),
   playPresetChange: vi.fn(),
   playReset: vi.fn(),
+  stopRoundCues: vi.fn(),
 }));
 
 import {
@@ -332,7 +333,7 @@ describe("Get Ready countdown", () => {
     expect(resetCue).not.toHaveBeenCalled();
   });
 
-  it("returns to Ready on a full reset and plays reset", () => {
+  it("returns to Ready on a full reset without a button cue", () => {
     setGetReadySecondsForMode("rolls", 5);
     render(<App />);
 
@@ -343,7 +344,7 @@ describe("Get Ready countdown", () => {
       "ready",
     );
     expect(clockText()).toBe("5:00");
-    expect(resetCue).toHaveBeenCalledTimes(1);
+    expect(resetCue).not.toHaveBeenCalled();
   });
 
   it("starts immediately when the configured duration is zero", () => {
@@ -365,34 +366,31 @@ describe("Get Ready countdown", () => {
 });
 
 describe("audio cue mapping", () => {
-  it("plays pause and resume exactly once each", () => {
+  it("does not play pause or resume button cues", () => {
     render(<App />);
     pressMainShort();
     advance(1 * SECOND);
     vi.clearAllMocks();
 
     pressMainShort();
-    expect(pauseCue).toHaveBeenCalledTimes(1);
-
     pressMainShort();
-    expect(resumeCue).toHaveBeenCalledTimes(1);
-    expect(pauseCue).toHaveBeenCalledTimes(1);
+
+    expect(pauseCue).not.toHaveBeenCalled();
+    expect(resumeCue).not.toHaveBeenCalled();
     expect(workCue).not.toHaveBeenCalled();
   });
 
-  it("plays preset_change only for preset changes, not mode changes", () => {
+  it("does not play preset or mode button cues", () => {
     render(<App />);
 
     pressModeShort();
-    expect(presetCue).toHaveBeenCalledTimes(1);
-    expect(modeCue).not.toHaveBeenCalled();
-
     pressModeLong();
-    expect(modeCue).toHaveBeenCalledTimes(1);
-    expect(presetCue).toHaveBeenCalledTimes(1);
+
+    expect(presetCue).not.toHaveBeenCalled();
+    expect(modeCue).not.toHaveBeenCalled();
   });
 
-  it("plays reset on a reset hold and no round cue", () => {
+  it("does not play a reset cue or a round cue", () => {
     render(<App />);
     pressMainShort();
     advance(1 * SECOND);
@@ -400,7 +398,7 @@ describe("audio cue mapping", () => {
 
     pressMainLong();
 
-    expect(resetCue).toHaveBeenCalledTimes(1);
+    expect(resetCue).not.toHaveBeenCalled();
     expect(workCue).not.toHaveBeenCalled();
     expect(restCue).not.toHaveBeenCalled();
   });
@@ -810,13 +808,13 @@ describe("the Mode button and keyboard selection", () => {
     );
   });
 
-  it("flashes the new mode name and beeps once on a mode change", () => {
+  it("flashes the new mode name without a button cue", () => {
     render(<App />);
 
     selectMode("GI");
     advance(0);
 
-    expect(playModeChange).toHaveBeenCalledTimes(1);
+    expect(playModeChange).not.toHaveBeenCalled();
     expect(document.querySelector(".mode-flash")?.textContent).toBe(
       "MODE: GI",
     );

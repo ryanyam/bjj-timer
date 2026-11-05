@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { MAIN_BUTTON_HOLD_MS, MODE_BUTTON_HOLD_MS } from "./gamepad";
@@ -14,6 +14,7 @@ vi.mock("./audio", () => ({
   playResume: vi.fn(),
   playPresetChange: vi.fn(),
   playReset: vi.fn(),
+  stopRoundCues: vi.fn(),
 }));
 
 import { playWorkStart } from "./audio";
@@ -549,6 +550,51 @@ describe("the white MODE/OPTION button", () => {
     expect(messageText()).toBe("Hold green to reset before changing.");
     expect(modeContextText()).toBe("ROLLS");
     expect(clockText()).toBe("5:00");
+  });
+
+  it("cancels an in-flight pointer white hold when the session starts", () => {
+    const pad = mountWithPad();
+
+    fireEvent.pointerDown(modeButton());
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0.5");
+    expect(modeButton().textContent).toContain("Keep holding for mode");
+
+    tapMain(pad, 100);
+
+    expect(document.querySelector(".app")?.getAttribute("data-status")).toBe(
+      "running",
+    );
+    expect(modeButton().hasAttribute("disabled")).toBe(true);
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
+    expect(modeButton().getAttribute("data-mode-held")).toBeNull();
+    expect(modeButton().textContent).toContain("LOCKED");
+    expect(modeButton().textContent).not.toContain("Keep holding for mode");
+
+    fireEvent.pointerUp(window);
+    expect(modeContextText()).toBe("ROLLS");
+    expect(clockText()).toBe("5:00");
+
+    // Reset unlocks selection; the cancelled gesture must not revive, and a
+    // fresh press must be required.
+    downMain(pad, 2_000);
+    frameAt(2_000 + MAIN_BUTTON_HOLD_MS);
+    upMain(pad, 2_000 + MAIN_BUTTON_HOLD_MS + 16);
+
+    expect(document.querySelector(".app")?.getAttribute("data-status")).toBe(
+      "ready",
+    );
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
+    expect(modeButton().getAttribute("data-mode-held")).toBeNull();
+
+    fireEvent.pointerDown(modeButton());
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0.5");
+    fireEvent.pointerUp(window);
   });
 
   it("clears physical white feedback on disconnect and page hiding", () => {

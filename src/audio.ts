@@ -137,28 +137,42 @@ function startCue(cue: CueName, bell: boolean): void {
     return;
   }
 
+  let source: AudioBufferSourceNode | null = null;
+  let gain: GainNode | null = null;
+  let entry: { source: AudioBufferSourceNode; gain: GainNode } | null = null;
+
   try {
-    const source = audio.createBufferSource();
-    const gain = audio.createGain();
+    source = audio.createBufferSource();
+    gain = audio.createGain();
     source.buffer = buffer;
     gain.gain.value = gainValue;
     source.connect(gain);
     gain.connect(audio.destination);
 
-    const entry = { source, gain };
+    entry = { source, gain };
 
     if (bell) {
       activeBells.add(entry);
     }
 
-    source.onended = () => {
-      activeBells.delete(entry);
-      source.disconnect();
-      gain.disconnect();
+    const cleanup = () => {
+      if (entry !== null) {
+        activeBells.delete(entry);
+      }
+      source?.disconnect();
+      gain?.disconnect();
     };
 
+    source.onended = cleanup;
     source.start(audio.currentTime);
   } catch {
+    // A failed start must not leave a connected source/gain pair (or a bell
+    // entry) retained after the failure.
+    if (entry !== null) {
+      activeBells.delete(entry);
+    }
+    source?.disconnect();
+    gain?.disconnect();
     markUnavailable();
   }
 }
@@ -199,8 +213,13 @@ export function playModeChange(): void {
   startCue("mode_change", false);
 }
 
+/** Stop any playing round bell without starting a button/reset cue. */
+export function stopRoundCues(): void {
+  stopBells();
+}
+
 /** Reset stops any playing round bell immediately, then plays reset.wav. */
 export function playReset(): void {
-  stopBells();
+  stopRoundCues();
   startCue("reset", false);
 }

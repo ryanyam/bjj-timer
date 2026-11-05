@@ -7,7 +7,9 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Installed dependencies
 node_modules
+# Generated web build
 dist
 dist-ssr
 *.local
@@ -23,4 +25,8 @@ dist-ssr
 *.sln
 *.sw?
 
+# Generated Electron packages and packaging output
 release
+
+# Generated code-count reports
+.VSCodeCounter

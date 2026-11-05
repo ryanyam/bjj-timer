@@ -173,36 +173,50 @@ describe("the green MAIN button: hold progress", () => {
     expect(feed(false, false, 0)).toEqual({
       mainPressed: false,
       mainHoldProgress: 0,
+      modePressed: false,
+      modeHoldProgress: 0,
     });
     expect(feed(true, false, 16)).toEqual({
       mainPressed: true,
       mainHoldProgress: 0,
+      modePressed: false,
+      modeHoldProgress: 0,
     });
     expect(feed(true, false, 766)).toEqual({
       mainPressed: true,
       mainHoldProgress: 0.5,
+      modePressed: false,
+      modeHoldProgress: 0,
     });
     // The threshold consumes the hold; the progress clears immediately.
     expect(feed(true, false, 16 + MAIN_HOLD)).toEqual({
       mainPressed: true,
       mainHoldProgress: 0,
+      modePressed: false,
+      modeHoldProgress: 0,
     });
     expect(feed(false, false, 16 + MAIN_HOLD + 16)).toEqual({
       mainPressed: false,
       mainHoldProgress: 0,
+      modePressed: false,
+      modeHoldProgress: 0,
     });
   });
 
-  it("shows no progress for a button already held at connection", () => {
+  it("shows no accepted press for a button already held at connection", () => {
     const { feed } = setup();
 
     expect(feed(true, false, 0)).toEqual({
-      mainPressed: true,
+      mainPressed: false,
       mainHoldProgress: 0,
+      modePressed: false,
+      modeHoldProgress: 0,
     });
     expect(feed(true, false, MAIN_HOLD)).toEqual({
-      mainPressed: true,
+      mainPressed: false,
       mainHoldProgress: 0,
+      modePressed: false,
+      modeHoldProgress: 0,
     });
   });
 
@@ -216,8 +230,10 @@ describe("the green MAIN button: hold progress", () => {
     recogniser.cancel();
 
     expect(feed(true, false, 1_000)).toEqual({
-      mainPressed: true,
+      mainPressed: false,
       mainHoldProgress: 0,
+      modePressed: false,
+      modeHoldProgress: 0,
     });
   });
 });
@@ -384,6 +400,47 @@ describe("the white button: short press", () => {
     feed(false, false, 100 + MODE_HOLD + 50);
 
     expect(gestures).toEqual([{ kind: "mode" }]);
+  });
+});
+
+describe("the white button: hold progress", () => {
+  it("reports the white press immediately and grows to its threshold", () => {
+    const { feed } = setup();
+
+    expect(feed(false, false, 0)).toMatchObject({
+      modePressed: false,
+      modeHoldProgress: 0,
+    });
+    expect(feed(false, true, 16)).toMatchObject({
+      modePressed: true,
+      modeHoldProgress: 0,
+    });
+    expect(feed(false, true, 416)).toMatchObject({
+      modePressed: true,
+      modeHoldProgress: 0.5,
+    });
+    expect(feed(false, true, 16 + MODE_HOLD)).toMatchObject({
+      modePressed: true,
+      modeHoldProgress: 0,
+    });
+    expect(feed(false, false, 16 + MODE_HOLD + 16)).toMatchObject({
+      modePressed: false,
+      modeHoldProgress: 0,
+    });
+  });
+
+  it("clears white progress on cancellation", () => {
+    const { recogniser, feed } = setup();
+
+    feed(false, false, 0);
+    feed(false, true, 0);
+    feed(false, true, 400);
+    recogniser.cancel();
+
+    expect(feed(false, true, 500)).toMatchObject({
+      modePressed: false,
+      modeHoldProgress: 0,
+    });
   });
 });
 

@@ -153,6 +153,7 @@ function App() {
    * mode-hold threshold approaches.
    */
   const [modeHoldProgress, setModeHoldProgress] = useState(0);
+  const [pointerModePressed, setPointerModePressed] = useState(false);
   const modeHoldStartedAt = useRef<number | null>(null);
   const modeHoldTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -260,18 +261,30 @@ function App() {
    * must not be forgotten because React re-rendered. A future GPIO layer would
    * build the very same objects and call pressDown/pressUp on them.
    */
-  const [mainPress] = useState(() =>
-    createPressRecogniser({
+  const [mainPress] = useState(() => {
+    let stateKeyAtDown: string | null = null;
+    const recogniser = createPressRecogniser({
       longPressMs: MAIN_BUTTON_HOLD_MS,
       onPress: (kind) => {
         if (kind === "long") {
           mainLong();
         } else {
-          mainShort();
+          mainShort(stateKeyAtDown ?? undefined);
         }
       },
-    }),
-  );
+    });
+
+    return {
+      ...recogniser,
+      pressDown(stateKey?: string) {
+        stateKeyAtDown = stateKey ?? null;
+        recogniser.pressDown();
+      },
+      releaseState() {
+        stateKeyAtDown = null;
+      },
+    };
+  });
 
   const [modePress] = useState(() =>
     createPressRecogniser({
@@ -300,18 +313,27 @@ function App() {
     pointerHoldProgress,
     gamepad.mainHoldProgress,
   );
+  const effectiveModeHoldProgress = Math.max(
+    modeHoldProgress,
+    canSelect ? gamepad.modeHoldProgress : 0,
+  );
+  const modePressed =
+    (canSelect && pointerModePressed) || gamepad.modePressed;
 
   const copy = controlCopy(state, {
     holding: mainHoldProgress > 0 && !resetFlash,
     resetFlash,
+    modeHolding: canSelect && effectiveModeHoldProgress > 0,
   });
 
-  const controllerError =
-    gamepad.status === "disconnected"
-      ? "Controller disconnected"
-      : gamepad.status === "unsupported"
-        ? "Controller unavailable"
-        : null;
+  const controllerStatus =
+    gamepad.status === "connected"
+      ? { text: "Controller connected", error: false }
+      : gamepad.status === "waiting"
+        ? { text: "Waiting for controller input", error: false }
+        : gamepad.status === "disconnected"
+          ? { text: "Controller disconnected", error: true }
+          : { text: "Controller unavailable", error: true };
 
   useEffect(() => {
     if (
@@ -471,9 +493,26 @@ function App() {
   }, [state.blockedSelectionSeq]);
 
   useEffect(() => {
+    const clearPointerMode = () => {
+      setPointerModePressed(false);
+      modePress.cancel();
+      stopModeHold();
+    };
+
+    window.addEventListener("pointerup", clearPointerMode);
+    window.addEventListener("pointercancel", clearPointerMode);
+
+    return () => {
+      window.removeEventListener("pointerup", clearPointerMode);
+      window.removeEventListener("pointercancel", clearPointerMode);
+    };
+  }, [modePress, stopModeHold]);
+
+  useEffect(() => {
     const cancelPresses = () => {
       mainPress.cancel();
       modePress.cancel();
+      setPointerModePressed(false);
       stopPointerHold();
       stopModeHold();
     };
@@ -644,18 +683,21 @@ function App() {
             style={mainHoldStyle(mainHoldProgress)}
             onPointerDown={() => {
               startPointerHold();
-              mainPress.pressDown();
+              mainPress.pressDown(stateKey(state));
             }}
             onPointerUp={() => {
               mainPress.pressUp();
+              mainPress.releaseState();
               stopPointerHold();
             }}
             onPointerLeave={() => {
               mainPress.cancel();
+              mainPress.releaseState();
               stopPointerHold();
             }}
             onPointerCancel={() => {
               mainPress.cancel();
+              mainPress.releaseState();
               stopPointerHold();
             }}
             onClick={(event) => {
@@ -689,24 +731,29 @@ function App() {
             aria-describedby="mode-hint"
             disabled={!canSelect}
             data-active={copy.secondaryActive ? "true" : undefined}
-            data-mode-holding={modeHoldProgress > 0 ? "true" : undefined}
-            style={{ "--mode-hold": modeHoldProgress } as CSSProperties}
+            data-mode-held={modePressed ? "true" : undefined}
+            data-mode-holding={effectiveModeHoldProgress > 0 ? "true" : undefined}
+            style={{ "--mode-hold": effectiveModeHoldProgress } as CSSProperties}
             {...(canSelect
               ? {
                   onPointerDown: () => {
+                    setPointerModePressed(true);
                     startModeHold();
                     modePress.pressDown();
                   },
                   onPointerUp: () => {
                     modePress.pressUp();
+                    setPointerModePressed(false);
                     stopModeHold();
                   },
                   onPointerLeave: () => {
                     modePress.cancel();
+                    setPointerModePressed(false);
                     stopModeHold();
                   },
                   onPointerCancel: () => {
                     modePress.cancel();
+                    setPointerModePressed(false);
                     stopModeHold();
                   },
                   onClick: (event: MouseEvent<HTMLButtonElement>) => {
@@ -739,20 +786,19 @@ function App() {
 
         <SettingsPanel />
 
-        {(soundUnavailable || controllerError !== null) && (
-          <div className="app-footer__status">
-            {soundUnavailable && (
-              <p className="sound-warning" role="status">
-                Sound unavailable
-              </p>
-            )}
-            {controllerError !== null && (
-              <p className="controller-status controller-status--error">
-                {controllerError}
-              </p>
-            )}
-          </div>
-        )}
+        <div className="app-footer__status">
+          <p
+            className={`controller-status${controllerStatus.error ? " controller-status--error" : ""}`}
+            role="status"
+          >
+            {controllerStatus.text}
+          </p>
+          {soundUnavailable && (
+            <p className="sound-warning" role="status">
+              Sound unavailable
+            </p>
+          )}
+        </div>
       </footer>
     </div>
   );

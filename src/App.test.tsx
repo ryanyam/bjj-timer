@@ -282,9 +282,9 @@ describe("Get Ready countdown", () => {
     expect(phaseHeadlineText()).toBe("GET READY");
     expect(clockText()).toBe("0:05");
     expect(mainButton().textContent).toContain("STARTING...");
-    expect(mainButton().textContent).toContain("Press to stop the countdown");
+    expect(mainButton().textContent).toContain("Press to cancel · Hold to reset");
     expect(modeButton().textContent).toContain("LOCKED");
-    expect(modeButton().textContent).toContain("Wait for the round to start");
+    expect(modeButton().textContent).toContain("Hold green to reset before changing");
     expect(modeButton().hasAttribute("disabled")).toBe(true);
     expect(roundText()).toBe("ROUND 1");
     expect(workCue).not.toHaveBeenCalled();
@@ -308,7 +308,7 @@ describe("Get Ready countdown", () => {
     pressMainShort();
 
     expect(clockText()).toBe("0:03");
-    expect(modeButton().textContent).toContain("Wait for the round to start");
+    expect(modeButton().textContent).toContain("Hold green to reset before changing");
 
     advance(3 * SECOND);
 
@@ -1242,6 +1242,20 @@ describe("Main hold progress", () => {
 });
 
 describe("abandoning and guarding presses", () => {
+  it("does not apply a pointer short press after the phase changes", () => {
+    render(<App />);
+    pressMainShort();
+    advance(4 * MINUTE + 59 * SECOND);
+
+    fireEvent.pointerDown(mainButton());
+    advance(1 * SECOND);
+    fireEvent.pointerUp(mainButton());
+
+    expect(phaseText()).toBe("REST");
+    expect(mainElement().getAttribute("data-status")).toBe("running");
+    expect(clockText()).toBe("1:00");
+  });
+
   it("fires no Main action when the pointer leaves mid-hold", () => {
     render(<App />);
     const main = mainButton();

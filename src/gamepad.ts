@@ -80,6 +80,8 @@ export interface GamepadUpdate {
 export interface GamepadFeedback {
   mainPressed: boolean;
   mainHoldProgress: number;
+  modePressed: boolean;
+  modeHoldProgress: number;
 }
 
 export interface GamepadRecogniserOptions {
@@ -116,6 +118,8 @@ export interface GamepadRecogniser {
 const IDLE_FEEDBACK: GamepadFeedback = {
   mainPressed: false,
   mainHoldProgress: 0,
+  modePressed: false,
+  modeHoldProgress: 0,
 };
 
 export function createGamepadRecogniser({
@@ -265,7 +269,18 @@ export function createGamepadRecogniser({
         mainHoldProgress = clamp01((now - mainDownSince) / mainHoldMs);
       }
 
-      return { mainPressed, mainHoldProgress };
+      let modeHoldProgress = 0;
+
+      if (modePressed && modeDownSince !== null && !modeHoldFired) {
+        modeHoldProgress = clamp01((now - modeDownSince) / modeHoldMs);
+      }
+
+      return {
+        mainPressed: mainArmed && mainPressed,
+        mainHoldProgress,
+        modePressed: modeArmed && modePressed,
+        modeHoldProgress,
+      };
     },
 
     cancel,

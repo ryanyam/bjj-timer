@@ -1,4 +1,3 @@
-import { MAIN_BUTTON_HOLD_MS } from "./gamepad";
 import { mainLabel, type RoundState } from "./round";
 
 export interface ControlCopy {
@@ -14,10 +13,8 @@ export interface ControlCopyOptions {
   readonly holding?: boolean;
   /** The reset just completed and the button is briefly flashing RESET. */
   readonly resetFlash?: boolean;
-}
-
-function holdSeconds(): string {
-  return `${MAIN_BUTTON_HOLD_MS / 1_000} s`;
+  /** A physical/pointer white hold is currently in progress and available. */
+  readonly modeHolding?: boolean;
 }
 
 /**
@@ -31,9 +28,9 @@ export function controlCopy(
 ): ControlCopy {
   const ready = state.status === "ready";
   const getReady = state.status === "getReady";
-  const running = state.status === "running";
   const holding = options.holding === true;
   const resetFlash = options.resetFlash === true;
+  const modeHolding = options.modeHolding === true;
 
   const primaryLabel = resetFlash
     ? "RESET"
@@ -46,22 +43,18 @@ export function controlCopy(
     : holding
       ? "Keep holding..."
       : getReady
-        ? "Press to stop the countdown"
+        ? "Press to cancel · Hold to reset"
         : ready
-          ? "Press to begin"
-          : running
-            ? "Press to pause"
-            : `Hold ${holdSeconds()} to reset`;
+          ? "Hold to reset"
+          : "Hold to reset";
 
   const secondaryLabel = ready ? "PRESET" : "LOCKED";
 
   const secondaryHint = ready
-    ? "Press: next preset · Hold: switch mode"
-    : getReady
-      ? "Wait for the round to start"
-      : running
-        ? "Pause and reset to change"
-        : "Hold left button to reset";
+    ? modeHolding
+      ? "Keep holding for mode"
+      : "Press: next preset · Hold: next mode"
+    : "Hold green to reset before changing";
 
   return {
     primaryLabel,

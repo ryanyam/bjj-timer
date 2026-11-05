@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { controlCopy } from "./controls";
-import { MAIN_BUTTON_HOLD_MS } from "./gamepad";
 import { initialRoundState, reduce, type RoundState } from "./round";
 
 const T0 = 1_700_000_000_000;
@@ -17,9 +16,9 @@ describe("controlCopy", () => {
   it("gives Ready the start and preset instructions", () => {
     expect(controlCopy(initialRoundState)).toEqual({
       primaryLabel: "START",
-      primaryHint: "Press to begin",
+      primaryHint: "Hold to reset",
       secondaryLabel: "PRESET",
-      secondaryHint: "Press: next preset · Hold: switch mode",
+      secondaryHint: "Press: next preset · Hold: next mode",
       secondaryActive: true,
     });
   });
@@ -27,9 +26,9 @@ describe("controlCopy", () => {
   it("gives Running pause and locked instructions", () => {
     expect(controlCopy(started())).toEqual({
       primaryLabel: "PAUSE",
-      primaryHint: "Press to pause",
+      primaryHint: "Hold to reset",
       secondaryLabel: "LOCKED",
-      secondaryHint: "Pause and reset to change",
+      secondaryHint: "Hold green to reset before changing",
       secondaryActive: false,
     });
   });
@@ -37,9 +36,9 @@ describe("controlCopy", () => {
   it("gives Paused resume and reset instructions", () => {
     expect(controlCopy(paused())).toEqual({
       primaryLabel: "RESUME",
-      primaryHint: `Hold ${MAIN_BUTTON_HOLD_MS / 1_000} s to reset`,
+      primaryHint: "Hold to reset",
       secondaryLabel: "LOCKED",
-      secondaryHint: "Hold left button to reset",
+      secondaryHint: "Hold green to reset before changing",
       secondaryActive: false,
     });
   });
@@ -48,6 +47,20 @@ describe("controlCopy", () => {
     expect(controlCopy(paused(), { holding: true }).primaryHint).toBe(
       "Keep holding...",
     );
+  });
+
+  it("changes the white hint while an available mode hold is active", () => {
+    expect(controlCopy(initialRoundState, { modeHolding: true })).toMatchObject({
+      secondaryLabel: "PRESET",
+      secondaryHint: "Keep holding for mode",
+    });
+  });
+
+  it("does not show mode-hold guidance when the white action is locked", () => {
+    expect(controlCopy(started(), { modeHolding: true })).toMatchObject({
+      secondaryLabel: "LOCKED",
+      secondaryHint: "Hold green to reset before changing",
+    });
   });
 
   it("flashes RESET after the reset completes", () => {

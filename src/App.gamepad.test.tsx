@@ -94,6 +94,12 @@ function mainButton(): HTMLElement {
   return button;
 }
 
+function modeButton(): HTMLElement {
+  const button = document.querySelector<HTMLElement>(".control-button--mode");
+  if (button === null) throw new Error("Mode button not found");
+  return button;
+}
+
 function mainLabel(): string {
   const status = document.querySelector(".app")?.getAttribute("data-status");
   return status === "running" ? "Pause" : status === "paused" ? "Resume" : "Start";
@@ -224,20 +230,20 @@ afterEach(() => {
 });
 
 describe("controller status", () => {
-  it("does not show a waiting or connected status", () => {
+  it("shows waiting before detection and connected once a pad is exposed", () => {
     render(<App />);
 
-    expect(screen.queryByText("Waiting for controller input")).toBeNull();
+    expect(screen.getByText("Waiting for controller input")).toBeTruthy();
     expect(screen.queryByText("Controller connected")).toBeNull();
 
     pads = [makePad()];
     frameAt(0);
 
+    expect(screen.getByText("Controller connected")).toBeTruthy();
     expect(screen.queryByText("Waiting for controller input")).toBeNull();
-    expect(screen.queryByText("Controller connected")).toBeNull();
   });
 
-  it("shows an error after a known disconnection and clears it on return", () => {
+  it("shows a disconnect and a reconnect status", () => {
     pads = [makePad()];
     render(<App />);
     frameAt(0);
@@ -254,8 +260,8 @@ describe("controller status", () => {
 
     pads = [makePad()];
     frameAt(32);
+    expect(screen.getByText("Controller connected")).toBeTruthy();
     expect(screen.queryByText("Controller disconnected")).toBeNull();
-    expect(screen.queryByText("Controller connected")).toBeNull();
   });
 });
 
@@ -494,6 +500,109 @@ describe("the white MODE/OPTION button", () => {
 
     expect(modeContextText()).toBe("ROLLS");
     expect(clockText()).toBe("5:00");
+  });
+
+  it("shows physical white pressed and hold feedback in Ready", () => {
+    const pad = mountWithPad();
+
+    setMode(pad, true);
+    frameAt(100);
+
+    expect(modeButton().getAttribute("data-mode-held")).toBe("true");
+    expect(modeButton().textContent).not.toContain("Keep holding for mode");
+
+    frameAt(100 + 50);
+    expect(modeButton().textContent).toContain("Keep holding for mode");
+
+    frameAt(100 + MODE_BUTTON_HOLD_MS / 2);
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0.5");
+
+    setMode(pad, false);
+    frameAt(100 + MODE_BUTTON_HOLD_MS / 2 + 16);
+
+    expect(modeButton().getAttribute("data-mode-held")).toBeNull();
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0");
+    expect(modeButton().textContent).toContain(
+      "Press: next preset · Hold: next mode",
+    );
+    expect(modeContextText()).toBe("ROLLS");
+  });
+
+  it("does not show mode-hold guidance when the white action is locked", () => {
+    const pad = mountWithPad();
+    tapMain(pad, 16);
+
+    setMode(pad, true);
+    frameAt(100);
+    frameAt(100 + MODE_BUTTON_HOLD_MS / 2);
+
+    expect(modeButton().getAttribute("data-mode-held")).toBe("true");
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0");
+    expect(modeButton().textContent).toContain("LOCKED");
+    expect(modeButton().textContent).toContain(
+      "Hold green to reset before changing",
+    );
+    expect(modeButton().textContent).not.toContain("Keep holding for mode");
+
+    frameAt(100 + MODE_BUTTON_HOLD_MS);
+    advance(0);
+    expect(messageText()).toBe("Hold green to reset before changing.");
+    expect(modeContextText()).toBe("ROLLS");
+    expect(clockText()).toBe("5:00");
+  });
+
+  it("clears physical white feedback on disconnect and page hiding", () => {
+    const pad = mountWithPad();
+    setMode(pad, true);
+    frameAt(100);
+    expect(modeButton().getAttribute("data-mode-held")).toBe("true");
+
+    act(() => {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "hidden",
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    frameAt(116);
+    expect(modeButton().getAttribute("data-mode-held")).toBeNull();
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0");
+    expect(modeContextText()).toBe("ROLLS");
+
+    setMode(pad, false);
+    frameAt(132);
+    setMode(pad, true);
+    frameAt(148);
+    expect(modeButton().getAttribute("data-mode-held")).toBe("true");
+
+    act(() => {
+      window.dispatchEvent(new Event("gamepaddisconnected"));
+    });
+    pads = [];
+    frameAt(164);
+    expect(modeButton().getAttribute("data-mode-held")).toBeNull();
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0");
+    expect(screen.getByText("Controller disconnected")).toBeTruthy();
+  });
+
+  it("clears physical white feedback on blur without changing mode", () => {
+    const pad = mountWithPad();
+
+    setMode(pad, true);
+    frameAt(100);
+    frameAt(100 + MODE_BUTTON_HOLD_MS / 2);
+    expect(modeButton().getAttribute("data-mode-held")).toBe("true");
+
+    act(() => {
+      window.dispatchEvent(new Event("blur"));
+    });
+    frameAt(100 + MODE_BUTTON_HOLD_MS * 3);
+
+    expect(modeButton().getAttribute("data-mode-held")).toBeNull();
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0");
+    setMode(pad, false);
+    frameAt(100 + MODE_BUTTON_HOLD_MS * 3 + 16);
+    expect(modeContextText()).toBe("ROLLS");
   });
 
   it("blocks selection while running and shows the notice", () => {

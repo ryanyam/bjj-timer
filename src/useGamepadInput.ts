@@ -29,11 +29,17 @@ export interface GamepadInput {
   mainPressed: boolean;
   /** How far the green press has travelled towards reset, 0 to 1. */
   mainHoldProgress: number;
+  /** True while the white button is physically down (for immediate feedback). */
+  modePressed: boolean;
+  /** How far the white press has travelled towards a mode change, 0 to 1. */
+  modeHoldProgress: number;
 }
 
 const IDLE_FEEDBACK: GamepadFeedback = {
   mainPressed: false,
   mainHoldProgress: 0,
+  modePressed: false,
+  modeHoldProgress: 0,
 };
 
 /**
@@ -61,12 +67,20 @@ export function useGamepadInput(options: GamepadInputOptions): GamepadInput {
     // Whole percentages are plenty for a progress bar and stop a 60 fps loop
     // from re-rendering for changes the eye cannot see.
     const mainHoldProgress = Math.round(next.mainHoldProgress * 100) / 100;
+    const modeHoldProgress = Math.round(next.modeHoldProgress * 100) / 100;
 
     setFeedback((previous) =>
       previous.mainPressed === next.mainPressed &&
-      previous.mainHoldProgress === mainHoldProgress
+      previous.mainHoldProgress === mainHoldProgress &&
+      previous.modePressed === next.modePressed &&
+      previous.modeHoldProgress === modeHoldProgress
         ? previous
-        : { mainPressed: next.mainPressed, mainHoldProgress },
+        : {
+            mainPressed: next.mainPressed,
+            mainHoldProgress,
+            modePressed: next.modePressed,
+            modeHoldProgress,
+          },
     );
   }, []);
 
@@ -244,6 +258,8 @@ export function useGamepadInput(options: GamepadInputOptions): GamepadInput {
     status,
     mainPressed: feedback.mainPressed,
     mainHoldProgress: feedback.mainHoldProgress,
+    modePressed: feedback.modePressed,
+    modeHoldProgress: feedback.modeHoldProgress,
   };
 }
 

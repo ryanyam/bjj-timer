@@ -76,26 +76,51 @@ Electron `app://bjj-timer` profile and is not imported automatically. Re-enter
 the Get Ready and audio settings in the desktop app after the first migration.
 Keeping the profile directory preserves them for later AppImage replacements.
 
-## Manual acceptance checks
+## Ubuntu launch
 
-1. Disconnect networking and launch the AppImage; confirm the timer opens with
-   no server or browser.
-2. At 1920×1080, confirm the Ready screen, all controls, and the GET READY
-   countdown fit without scrolling or clipping.
-3. Check START/PAUSE/RESUME, reset hold, preset short press, mode hold, and
-   B0/B1 arcade-button mappings.
-4. Confirm all seven sounds play at their mapped events and Get Ready is silent
-   except the round-start cue at zero.
-5. Kill and relaunch the AppImage; confirm Get Ready and audio settings persist.
-6. Press Ctrl+Shift+Q to leave kiosk mode, then relaunch.
+The current beta artifact is:
+
+```text
+release/BJJ-Timer-0.1.0-beta.2-x86_64.AppImage
+```
+
+After copying it over USB:
+
+```sh
+sha256sum BJJ-Timer-0.1.0-beta.2-x86_64.AppImage
+chmod +x BJJ-Timer-0.1.0-beta.2-x86_64.AppImage
+./BJJ-Timer-0.1.0-beta.2-x86_64.AppImage
+```
+
+On Ubuntu releases that lack FUSE 2, install `libfuse2` first. The app opens
+fullscreen in kiosk mode. The maintenance exit is **Ctrl+Shift+Q**.
+
+## Offline gym-test checklist
+
+Perform these checks on the intended Ubuntu host with networking disabled and
+record the actual display resolution and OS scaling:
+
+1. Launch the AppImage; confirm the timer opens without a Vite server, browser,
+   network connection, or separately installed Electron/Node.js.
+2. Check READY, GET READY, WORK, REST, PAUSED, and the mode-change popup at the
+   actual display resolution. Confirm no clipping, overlap, or scrolling.
+3. Verify the mode order ROLLS → GI → ADV → NOGI → KIDS and the configured
+   preset cycles, including NOGI and ADV entry defaults.
+4. Check START/PAUSE/RESUME, reset hold, preset short press, and mode hold from
+   the physical arcade buttons B0/B1, as well as the on-screen controls.
+5. Confirm the seven audio cues play at their mapped events, Get Ready is
+   silent except the round-start cue at zero, and the first press unlocks audio.
+6. Kill and relaunch the AppImage; confirm Get Ready and audio settings persist
+   in the `~/.config/bjj-timer/` profile.
+7. Press Ctrl+Shift+Q to leave kiosk mode, relaunch, and confirm the app still
+   starts offline.
 
 ## Build limitation
 
-The current development host is macOS arm64. A Linux x86-64 AppImage cannot be
-fully built or launched here without a Linux x86-64 environment or Linux Docker.
-Run `npm run desktop:build` on the target Linux x86-64 machine (or a Linux
-container) to produce and test the AppImage. The exact command is above; no
-Linux package or Chromebox run is claimed as tested here.
+The current development host is macOS arm64. The Linux x86-64 AppImage can be
+packaged here with `electron-builder`, but it cannot be launched or tested on
+this host. Runtime verification requires an Ubuntu x86-64 machine or Linux
+container; no Ubuntu launch, hardware-button, audio, or TV test is claimed.
 
 ## Versioning and releases
 

@@ -7,6 +7,18 @@ The authoritative version is the `version` field in `package.json`.
 
 No unreleased changes recorded.
 
+## [0.1.0-beta.2]
+
+### Added
+
+- NOGI mode with four presets and a 3:00 / 0:10 entry preset.
+- ADV mode with three presets and a 5:00 / 0:15 entry preset.
+
+### Changed
+
+- Renamed the visible Drills mode to GI while retaining the existing internal
+  `drills` identifier and its 2:00 / 0:30 default behavior.
+
 ## [0.1.0-beta.1]
 
 ### Changed

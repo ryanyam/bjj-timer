@@ -7,6 +7,17 @@ The authoritative version is the `version` field in `package.json`.
 
 No unreleased changes recorded.
 
+## [0.1.0-beta.5]
+
+### Changed
+
+- Refined white MODE/PRESET feedback with a stable `PRESET` label and
+  `Press: preset · Hold: mode` instruction.
+- Added immediate pressed feedback while delaying hold-progress display for
+  250 ms; the existing 800 ms mode-change threshold is unchanged.
+- Removed transient "Keep holding for mode" and other hold-specific label
+  changes.
+
 ## [0.1.0-beta.4]
 
 ### Fixed

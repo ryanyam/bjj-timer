@@ -7,6 +7,18 @@ The authoritative version is the `version` field in `package.json`.
 
 No unreleased changes recorded.
 
+## [0.1.0-beta.3]
+
+### Changed
+
+- Added pressed and hold-progress feedback for the physical white MODE button.
+- Added visible locked-state feedback for physical MODE attempts without changing
+  mode or preset selection behavior.
+- Clarified green reset guidance across Ready, Get Ready, Running, and Paused.
+- Added compact controller connection status.
+- Applied the green pointer gesture's state-change guard to match the physical
+  button.
+
 ## [0.1.0-beta.2]
 
 ### Added

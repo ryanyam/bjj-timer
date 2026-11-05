@@ -8,7 +8,7 @@
 
 import { formatRemaining } from "./timer";
 
-export type ModeId = "rolls" | "drills" | "nogi" | "kids";
+export type ModeId = "rolls" | "drills" | "adv" | "nogi" | "kids";
 
 export interface Preset {
   readonly id: string;
@@ -18,7 +18,7 @@ export interface Preset {
 
 export interface TrainingMode {
   readonly id: ModeId;
-  readonly title: "ROLLS" | "DRILLS" | "NOGI" | "KIDS";
+  readonly title: "ROLLS" | "GI" | "ADV" | "NOGI" | "KIDS";
   /** Preset loaded whenever this mode is selected from another mode. */
   readonly defaultPresetIndex: number;
   readonly presets: readonly Preset[];
@@ -39,13 +39,23 @@ export const TRAINING_MODES: readonly TrainingMode[] = [
   },
   {
     id: "drills",
-    title: "DRILLS",
+    title: "GI",
     defaultPresetIndex: 0,
     presets: [
       { id: "drills-2-30", workMs: 2 * MINUTE, restMs: 30 * SECOND },
       { id: "drills-3-30", workMs: 3 * MINUTE, restMs: 30 * SECOND },
       { id: "drills-5-30", workMs: 5 * MINUTE, restMs: 30 * SECOND },
       { id: "drills-1-30", workMs: 1 * MINUTE, restMs: 30 * SECOND },
+    ],
+  },
+  {
+    id: "adv",
+    title: "ADV",
+    defaultPresetIndex: 0,
+    presets: [
+      { id: "adv-5-15", workMs: 5 * MINUTE, restMs: 15 * SECOND },
+      { id: "adv-7-15", workMs: 7 * MINUTE, restMs: 15 * SECOND },
+      { id: "adv-3-15", workMs: 3 * MINUTE, restMs: 15 * SECOND },
     ],
   },
   {

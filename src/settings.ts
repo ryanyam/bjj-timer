@@ -7,6 +7,7 @@ export type GetReadySeconds = (typeof GET_READY_OPTIONS)[number];
 const DEFAULTS: Record<ModeId, GetReadySeconds> = {
   rolls: 5,
   drills: 3,
+  adv: 3,
   nogi: 3,
   kids: 3,
 };

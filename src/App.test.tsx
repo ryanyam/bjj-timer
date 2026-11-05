@@ -92,12 +92,14 @@ function phaseHeadlineText(): string {
 function modeContextText(): string {
   const mode = document.querySelector(".app")?.getAttribute("data-mode");
   return mode === "drills"
-    ? "DRILLS"
-    : mode === "nogi"
-      ? "NOGI"
-      : mode === "kids"
-        ? "KIDS"
-        : "ROLLS";
+    ? "GI"
+    : mode === "adv"
+      ? "ADV"
+      : mode === "nogi"
+        ? "NOGI"
+        : mode === "kids"
+          ? "KIDS"
+          : "ROLLS";
 }
 
 function roundText(): string {
@@ -165,7 +167,7 @@ function presetRow(): HTMLElement {
 }
 
 function modeOption(
-  name: "ROLLS" | "DRILLS" | "NOGI" | "KIDS",
+  name: "ROLLS" | "GI" | "ADV" | "NOGI" | "KIDS",
 ): HTMLElement {
   return within(modeRow()).getByRole("button", { name });
 }
@@ -229,7 +231,9 @@ function pressModeLong(): void {
   longPress(modeButton(), MODE_BUTTON_HOLD_MS);
 }
 
-function selectMode(name: "ROLLS" | "DRILLS" | "NOGI" | "KIDS"): void {
+function selectMode(
+  name: "ROLLS" | "GI" | "ADV" | "NOGI" | "KIDS",
+): void {
   fireEvent.click(modeOption(name));
 }
 
@@ -256,6 +260,7 @@ beforeEach(() => {
   resetGetReadySettings();
   setGetReadySecondsForMode("rolls", 0);
   setGetReadySecondsForMode("drills", 0);
+  setGetReadySecondsForMode("adv", 0);
   setGetReadySecondsForMode("nogi", 0);
   setGetReadySecondsForMode("kids", 0);
 });
@@ -298,7 +303,7 @@ describe("Get Ready countdown", () => {
   it("runs 3 seconds for Drills", () => {
     setGetReadySecondsForMode("drills", 3);
     render(<App />);
-    selectMode("DRILLS");
+    selectMode("GI");
 
     pressMainShort();
 
@@ -343,10 +348,11 @@ describe("Get Ready countdown", () => {
 
   it("starts immediately when the configured duration is zero", () => {
     setGetReadySecondsForMode("drills", 0);
+  setGetReadySecondsForMode("adv", 0);
   setGetReadySecondsForMode("nogi", 0);
   setGetReadySecondsForMode("kids", 0);
     render(<App />);
-    selectMode("DRILLS");
+    selectMode("GI");
 
     pressMainShort();
 
@@ -456,16 +462,19 @@ describe("the initial selection", () => {
 
     expect(options.map((button) => button.textContent?.trim())).toEqual([
       "ROLLS",
-      "DRILLS",
+      "GI",
+      "ADV",
       "NOGI",
       "KIDS",
     ]);
     expect(modeOption("ROLLS").getAttribute("aria-pressed")).toBe("true");
-    expect(modeOption("DRILLS").getAttribute("aria-pressed")).toBe("false");
+    expect(modeOption("GI").getAttribute("aria-pressed")).toBe("false");
+    expect(modeOption("ADV").getAttribute("aria-pressed")).toBe("false");
     expect(modeOption("NOGI").getAttribute("aria-pressed")).toBe("false");
     expect(modeOption("KIDS").getAttribute("aria-pressed")).toBe("false");
     expect(modeOption("ROLLS").getAttribute("data-selected")).toBe("true");
-    expect(modeOption("DRILLS").getAttribute("data-selected")).toBeNull();
+    expect(modeOption("GI").getAttribute("data-selected")).toBeNull();
+    expect(modeOption("ADV").getAttribute("data-selected")).toBeNull();
     expect(modeOption("NOGI").getAttribute("data-selected")).toBeNull();
     expect(modeOption("KIDS").getAttribute("data-selected")).toBeNull();
   });
@@ -501,14 +510,14 @@ describe("the initial selection", () => {
 });
 
 describe("choosing a mode or preset while ready", () => {
-  it("switches to Drills and shows only its presets", () => {
+  it("shows GI and only its presets", () => {
     render(<App />);
 
-    selectMode("DRILLS");
+    selectMode("GI");
 
     expect(clockText()).toBe("2:00");
     expect(phaseText()).toBe("WORK");
-    expect(modeContextText()).toBe("DRILLS");
+    expect(modeContextText()).toBe("GI");
     expect(nextText()).toBe("NEXT: WORK 2:00");
     expect(presetLabels()).toEqual([
       "2:00 / 0:30",
@@ -516,7 +525,7 @@ describe("choosing a mode or preset while ready", () => {
       "5:00 / 0:30",
       "1:00 / 0:30",
     ]);
-    expect(modeOption("DRILLS").getAttribute("aria-pressed")).toBe("true");
+    expect(modeOption("GI").getAttribute("aria-pressed")).toBe("true");
     expect(modeOption("ROLLS").getAttribute("aria-pressed")).toBe("false");
     expect(mainElement().getAttribute("data-mode")).toBe("drills");
   });
@@ -540,7 +549,7 @@ describe("choosing a mode or preset while ready", () => {
     selectPreset(1);
     expect(clockText()).toBe("3:00");
 
-    selectMode("DRILLS");
+    selectMode("GI");
     expect(clockText()).toBe("2:00");
     expect(activePreset().textContent?.trim()).toBe("2:00 / 0:30");
 
@@ -551,7 +560,7 @@ describe("choosing a mode or preset while ready", () => {
     expect(clockText()).toBe("5:00");
     expect(activePreset().textContent?.trim()).toBe("5:00 / 1:00");
 
-    selectMode("DRILLS");
+    selectMode("GI");
     expect(clockText()).toBe("2:00");
     expect(activePreset().textContent?.trim()).toBe("2:00 / 0:30");
   });
@@ -559,7 +568,7 @@ describe("choosing a mode or preset while ready", () => {
   it("uses the selector's mode and preset actions through the same reducer", () => {
     render(<App />);
 
-    selectMode("DRILLS");
+    selectMode("GI");
     selectPreset(0);
 
     // The Mode button then cycles from exactly the same selected state.
@@ -588,9 +597,16 @@ describe("the Mode button and keyboard selection", () => {
 
     pressModeLong();
 
-    expect(modeContextText()).toBe("DRILLS");
+    expect(modeContextText()).toBe("GI");
     expect(clockText()).toBe("2:00");
     expect(activePreset().textContent?.trim()).toBe("2:00 / 0:30");
+
+    pressModeLong();
+
+    expect(modeContextText()).toBe("ADV");
+    expect(clockText()).toBe("5:00");
+    expect(activePreset().textContent?.trim()).toBe("5:00 / 0:15");
+    expect(nextText()).toBe("NEXT: WORK 5:00");
 
     pressModeLong();
 
@@ -607,6 +623,50 @@ describe("the Mode button and keyboard selection", () => {
 
     expect(modeContextText()).toBe("ROLLS");
     expect(clockText()).toBe("5:00");
+  });
+
+  it("loads ADV at 5:00 / 0:15 on entry and cycles its presets", () => {
+    render(<App />);
+
+    selectMode("ADV");
+    expect(modeContextText()).toBe("ADV");
+    expect(clockText()).toBe("5:00");
+    expect(nextText()).toBe("NEXT: WORK 5:00");
+    expect(presetLabels()).toEqual([
+      "5:00 / 0:15",
+      "7:00 / 0:15",
+      "3:00 / 0:15",
+    ]);
+    expect(activePreset().textContent?.trim()).toBe("5:00 / 0:15");
+
+    const seen: string[] = [clockText()];
+    for (let press = 0; press < 3; press += 1) {
+      pressModeShort();
+      seen.push(clockText());
+    }
+    expect(seen).toEqual(["5:00", "7:00", "3:00", "5:00"]);
+
+    selectMode("ROLLS");
+    selectMode("ADV");
+    expect(clockText()).toBe("5:00");
+  });
+
+  it("runs ADV work and rest and increments the round after rest", () => {
+    render(<App />);
+    selectMode("ADV");
+    pressMainShort();
+
+    expect(clockText()).toBe("5:00");
+    expect(nextText()).toBe("NEXT: REST 0:15");
+
+    advance(5 * MINUTE);
+    expect(phaseText()).toBe("REST");
+    expect(clockText()).toBe("0:15");
+
+    advance(15 * SECOND);
+    expect(phaseText()).toBe("WORK");
+    expect(clockText()).toBe("5:00");
+    expect(roundText()).toBe("ROUND 2");
   });
 
   it("loads NOGI at 3:00 / 0:10 on entry and cycles its presets", () => {
@@ -656,9 +716,9 @@ describe("the Mode button and keyboard selection", () => {
     expect(roundText()).toBe("ROUND 2");
   });
 
-  it("cycles the full Drills preset sequence and wraps", () => {
+  it("cycles the full GI preset sequence and wraps", () => {
     render(<App />);
-    selectMode("DRILLS");
+    selectMode("GI");
 
     const seen: string[] = [clockText()];
     for (let press = 0; press < 4; press += 1) {
@@ -693,11 +753,11 @@ describe("the Mode button and keyboard selection", () => {
     expect(modeContextText()).toBe("ROLLS");
 
     advance(1);
-    expect(modeContextText()).toBe("DRILLS");
+    expect(modeContextText()).toBe("GI");
 
     fireEvent.pointerUp(modeButton());
 
-    expect(modeContextText()).toBe("DRILLS");
+    expect(modeContextText()).toBe("GI");
     expect(activePreset().textContent?.trim()).toBe("2:00 / 0:30");
   });
 
@@ -712,20 +772,25 @@ describe("the Mode button and keyboard selection", () => {
   it("allows keyboard activation of a visible selector option", () => {
     render(<App />);
 
-    fireEvent.click(modeOption("DRILLS"));
+    fireEvent.click(modeOption("GI"));
 
-    expect(modeContextText()).toBe("DRILLS");
+    expect(modeContextText()).toBe("GI");
     expect(clockText()).toBe("2:00");
   });
 
   it("flashes each mode as one single-line message", () => {
     render(<App />);
 
-    selectMode("DRILLS");
+    selectMode("GI");
     advance(0);
     expect(document.querySelector(".mode-flash")?.textContent).toBe(
-      "MODE: DRILLS",
+      "MODE: GI",
     );
+
+    advance(1_000);
+    selectMode("ADV");
+    advance(0);
+    expect(document.querySelector(".mode-flash")?.textContent).toBe("MODE: ADV");
 
     advance(1_000);
     selectMode("NOGI");
@@ -748,12 +813,12 @@ describe("the Mode button and keyboard selection", () => {
   it("flashes the new mode name and beeps once on a mode change", () => {
     render(<App />);
 
-    selectMode("DRILLS");
+    selectMode("GI");
     advance(0);
 
     expect(playModeChange).toHaveBeenCalledTimes(1);
     expect(document.querySelector(".mode-flash")?.textContent).toBe(
-      "MODE: DRILLS",
+      "MODE: GI",
     );
 
     advance(1_000);
@@ -809,9 +874,9 @@ describe("running a work/rest session", () => {
     expect(restCue).not.toHaveBeenCalled();
   });
 
-  it("uses Drills work and rest durations", () => {
+  it("uses GI work and rest durations", () => {
     render(<App />);
-    selectMode("DRILLS");
+    selectMode("GI");
     selectPreset(1);
     pressMainShort();
 
@@ -1024,7 +1089,7 @@ describe("pause, resume and reset", () => {
 
   it("resets from running work to Ready, round 1, preserving selection", () => {
     render(<App />);
-    selectMode("DRILLS");
+    selectMode("GI");
     selectPreset(1);
     pressMainShort();
     advance(30 * SECOND);
@@ -1035,7 +1100,7 @@ describe("pause, resume and reset", () => {
     expect(mainLabelText()).toBe("Start");
     expect(clockText()).toBe("3:00");
     expect(phaseText()).toBe("WORK");
-    expect(modeContextText()).toBe("DRILLS");
+    expect(modeContextText()).toBe("GI");
     expect(roundText()).toBe("ROUND 1");
     expect(nextText()).toBe("NEXT: WORK 3:00");
     expect(pausedBadge()).toBeNull();

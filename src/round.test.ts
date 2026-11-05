@@ -73,7 +73,7 @@ describe("the initial session", () => {
   });
 
   it("remembers a default preset for every mode", () => {
-    expect(initialRoundState.presetIndexByMode).toEqual([0, 0, 2, 0]);
+    expect(initialRoundState.presetIndexByMode).toEqual([0, 0, 0, 2, 0]);
   });
 });
 
@@ -296,7 +296,7 @@ describe("reset", () => {
     const running = reduce(chosen, { type: "mainShort", now: T0 });
     const resetState = reset(running);
 
-    expect(currentMode(resetState).title).toBe("DRILLS");
+    expect(currentMode(resetState).title).toBe("GI");
     expect(currentPresetIndex(resetState)).toBe(1);
     expect(displayMs(resetState, T0)).toBe(3 * MINUTE);
   });
@@ -317,7 +317,7 @@ describe("mode and preset selection while ready", () => {
     });
 
     expect(state.modeIndex).toBe(1);
-    expect(currentMode(state).title).toBe("DRILLS");
+    expect(currentMode(state).title).toBe("GI");
     expect(currentPresetIndex(state)).toBe(0);
     expect(state.status).toBe("ready");
     expect(state.phase).toBe("work");
@@ -345,11 +345,17 @@ describe("mode and preset selection while ready", () => {
       { type: "selectPreset", presetIndex: 1 },
     ]);
 
-    expect(currentMode(drills).title).toBe("DRILLS");
+    expect(currentMode(drills).title).toBe("GI");
     expect(currentPresetIndex(drills)).toBe(1);
     expect(displayMs(drills, T0)).toBe(3 * MINUTE);
 
-    const nogi = reduce(drills, nextMode);
+    const adv = reduce(drills, nextMode);
+    expect(currentMode(adv).title).toBe("ADV");
+    expect(currentPresetIndex(adv)).toBe(0);
+    expect(displayMs(adv, T0)).toBe(5 * MINUTE);
+    expect(currentRestMs(adv)).toBe(15 * SECOND);
+
+    const nogi = reduce(adv, nextMode);
     expect(currentMode(nogi).title).toBe("NOGI");
     expect(currentPresetIndex(nogi)).toBe(2);
     expect(displayMs(nogi, T0)).toBe(3 * MINUTE);
@@ -369,7 +375,7 @@ describe("mode and preset selection while ready", () => {
   it("loads NOGI at 3:00 / 0:10 on entry and re-entry", () => {
     const firstEntry = reduce(initialRoundState, {
       type: "selectMode",
-      modeIndex: 2,
+      modeIndex: 3,
     });
     expect(currentPresetIndex(firstEntry)).toBe(2);
     expect(currentWorkMs(firstEntry)).toBe(3 * MINUTE);
@@ -382,7 +388,7 @@ describe("mode and preset selection while ready", () => {
     expect(currentWorkMs(changed)).toBe(5 * MINUTE);
 
     const away = reduce(changed, { type: "selectMode", modeIndex: 0 });
-    const reentry = reduce(away, { type: "selectMode", modeIndex: 2 });
+    const reentry = reduce(away, { type: "selectMode", modeIndex: 3 });
     expect(currentPresetIndex(reentry)).toBe(2);
     expect(currentWorkMs(reentry)).toBe(3 * MINUTE);
   });
@@ -390,7 +396,7 @@ describe("mode and preset selection while ready", () => {
   it("cycles the full NOGI preset sequence and wraps", () => {
     const states = [0, 1, 2, 3, 4].map((presses) =>
       run(initialRoundState, [
-        { type: "selectMode", modeIndex: 2 },
+        { type: "selectMode", modeIndex: 3 },
         ...Array.from({ length: presses }, () => nextPreset),
       ]),
     );
@@ -449,10 +455,55 @@ describe("mode and preset selection while ready", () => {
     ]);
   });
 
+  it("loads ADV at 5:00 / 0:15 on entry and re-entry", () => {
+    const firstEntry = reduce(initialRoundState, {
+      type: "selectMode",
+      modeIndex: 2,
+    });
+    expect(currentMode(firstEntry).title).toBe("ADV");
+    expect(currentPresetIndex(firstEntry)).toBe(0);
+    expect(currentWorkMs(firstEntry)).toBe(5 * MINUTE);
+    expect(currentRestMs(firstEntry)).toBe(15 * SECOND);
+
+    const changed = reduce(firstEntry, {
+      type: "selectPreset",
+      presetIndex: 1,
+    });
+    expect(currentWorkMs(changed)).toBe(7 * MINUTE);
+
+    const away = reduce(changed, { type: "selectMode", modeIndex: 0 });
+    const reentry = reduce(away, { type: "selectMode", modeIndex: 2 });
+    expect(currentPresetIndex(reentry)).toBe(0);
+    expect(currentWorkMs(reentry)).toBe(5 * MINUTE);
+  });
+
+  it("cycles the full ADV preset sequence and wraps", () => {
+    const states = [0, 1, 2, 3].map((presses) =>
+      run(initialRoundState, [
+        { type: "selectMode", modeIndex: 2 },
+        ...Array.from({ length: presses }, () => nextPreset),
+      ]),
+    );
+
+    expect(states.map(currentPresetIndex)).toEqual([0, 1, 2, 0]);
+    expect(states.map(currentWorkMs)).toEqual([
+      5 * MINUTE,
+      7 * MINUTE,
+      3 * MINUTE,
+      5 * MINUTE,
+    ]);
+    expect(states.map(currentRestMs)).toEqual([
+      15 * SECOND,
+      15 * SECOND,
+      15 * SECOND,
+      15 * SECOND,
+    ]);
+  });
+
   it("loads the Kids 30-second work / 5-second rest default", () => {
     const kids = reduce(initialRoundState, {
       type: "selectMode",
-      modeIndex: 3,
+      modeIndex: 4,
     });
 
     expect(currentMode(kids).title).toBe("KIDS");
@@ -461,8 +512,8 @@ describe("mode and preset selection while ready", () => {
     expect(currentRestMs(kids)).toBe(5 * SECOND);
   });
 
-  it("cycles main modes Rolls -> Drills -> NOGI -> Kids -> Rolls", () => {
-    const labels = [0, 1, 2, 3, 4].map(
+  it("cycles main modes Rolls -> GI -> ADV -> NOGI -> Kids -> Rolls", () => {
+    const labels = [0, 1, 2, 3, 4, 5].map(
       (presses) =>
         currentMode(
           run(
@@ -472,7 +523,7 @@ describe("mode and preset selection while ready", () => {
         ).title,
     );
 
-    expect(labels).toEqual(["ROLLS", "DRILLS", "NOGI", "KIDS", "ROLLS"]);
+    expect(labels).toEqual(["ROLLS", "GI", "ADV", "NOGI", "KIDS", "ROLLS"]);
   });
 
   it("does not restart a cue or a blocked-attempt message", () => {

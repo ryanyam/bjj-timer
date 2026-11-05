@@ -13,16 +13,18 @@ const SECOND = 1_000;
 const MINUTE = 60 * SECOND;
 
 describe("the training definitions", () => {
-  it("contains the four real main modes", () => {
+  it("contains the five real main modes", () => {
     expect(TRAINING_MODES.map((mode) => mode.id)).toEqual([
       "rolls",
       "drills",
+      "adv",
       "nogi",
       "kids",
     ]);
     expect(TRAINING_MODES.map((mode) => mode.title)).toEqual([
       "ROLLS",
-      "DRILLS",
+      "GI",
+      "ADV",
       "NOGI",
       "KIDS",
     ]);
@@ -45,6 +47,11 @@ describe("the training definitions", () => {
         [1 * MINUTE, 30 * SECOND],
       ],
       [
+        [5 * MINUTE, 15 * SECOND],
+        [7 * MINUTE, 15 * SECOND],
+        [3 * MINUTE, 15 * SECOND],
+      ],
+      [
         [1 * MINUTE, 10 * SECOND],
         [2 * MINUTE, 10 * SECOND],
         [3 * MINUTE, 10 * SECOND],
@@ -57,18 +64,22 @@ describe("the training definitions", () => {
   it("has no extra presets or round-count configuration", () => {
     expect(TRAINING_MODES[0].presets).toHaveLength(2);
     expect(TRAINING_MODES[1].presets).toHaveLength(4);
-    expect(TRAINING_MODES[2].presets).toHaveLength(4);
-    expect(TRAINING_MODES[3].presets).toHaveLength(1);
-    expect(TRAINING_MODES).toHaveLength(4);
+    expect(TRAINING_MODES[2].presets).toHaveLength(3);
+    expect(TRAINING_MODES[3].presets).toHaveLength(4);
+    expect(TRAINING_MODES[4].presets).toHaveLength(1);
+    expect(TRAINING_MODES).toHaveLength(5);
   });
 
-  it("declares NOGI's default entry preset as 3:00 / 0:10", () => {
+  it("declares NOGI and ADV entry presets", () => {
     expect(TRAINING_MODES.map((mode) => mode.defaultPresetIndex)).toEqual([
-      0, 0, 2, 0,
+      0, 0, 0, 2, 0,
     ]);
-    expect(presetAt(2, 2).id).toBe("nogi-3-10");
-    expect(presetAt(2, 2).workMs).toBe(3 * MINUTE);
-    expect(presetAt(2, 2).restMs).toBe(10 * SECOND);
+    expect(presetAt(3, 2).id).toBe("nogi-3-10");
+    expect(presetAt(3, 2).workMs).toBe(3 * MINUTE);
+    expect(presetAt(3, 2).restMs).toBe(10 * SECOND);
+    expect(presetAt(2, 0).id).toBe("adv-5-15");
+    expect(presetAt(2, 0).workMs).toBe(5 * MINUTE);
+    expect(presetAt(2, 0).restMs).toBe(15 * SECOND);
   });
 
   it("derives work and rest durations from the same definitions", () => {
@@ -84,15 +95,21 @@ describe("the training definitions", () => {
     expect(restMsFor(1, 0)).toBe(30 * SECOND);
     expect(restMsFor(1, 3)).toBe(30 * SECOND);
 
-    expect(workMsFor(2, 0)).toBe(1 * MINUTE);
-    expect(workMsFor(2, 1)).toBe(2 * MINUTE);
+    expect(workMsFor(2, 0)).toBe(5 * MINUTE);
+    expect(workMsFor(2, 1)).toBe(7 * MINUTE);
     expect(workMsFor(2, 2)).toBe(3 * MINUTE);
-    expect(workMsFor(2, 3)).toBe(5 * MINUTE);
-    expect(restMsFor(2, 0)).toBe(10 * SECOND);
-    expect(restMsFor(2, 3)).toBe(10 * SECOND);
+    expect(restMsFor(2, 0)).toBe(15 * SECOND);
+    expect(restMsFor(2, 2)).toBe(15 * SECOND);
 
-    expect(workMsFor(3, 0)).toBe(30 * SECOND);
-    expect(restMsFor(3, 0)).toBe(5 * SECOND);
+    expect(workMsFor(3, 0)).toBe(1 * MINUTE);
+    expect(workMsFor(3, 1)).toBe(2 * MINUTE);
+    expect(workMsFor(3, 2)).toBe(3 * MINUTE);
+    expect(workMsFor(3, 3)).toBe(5 * MINUTE);
+    expect(restMsFor(3, 0)).toBe(10 * SECOND);
+    expect(restMsFor(3, 3)).toBe(10 * SECOND);
+
+    expect(workMsFor(4, 0)).toBe(30 * SECOND);
+    expect(restMsFor(4, 0)).toBe(5 * SECOND);
   });
 
   it("labels the selected preset explicitly and inactive ones compactly", () => {
@@ -102,22 +119,29 @@ describe("the training definitions", () => {
     expect(fullPresetLabel(presetAt(1, 1))).toBe("WORK 3:00 / REST 0:30");
     expect(fullPresetLabel(presetAt(1, 2))).toBe("WORK 5:00 / REST 0:30");
     expect(fullPresetLabel(presetAt(1, 3))).toBe("WORK 1:00 / REST 0:30");
-    expect(fullPresetLabel(presetAt(2, 0))).toBe("WORK 1:00 / REST 0:10");
-    expect(fullPresetLabel(presetAt(2, 1))).toBe("WORK 2:00 / REST 0:10");
-    expect(fullPresetLabel(presetAt(2, 2))).toBe("WORK 3:00 / REST 0:10");
-    expect(fullPresetLabel(presetAt(2, 3))).toBe("WORK 5:00 / REST 0:10");
-    expect(fullPresetLabel(presetAt(3, 0))).toBe("WORK 0:30 / REST 0:05");
+    expect(fullPresetLabel(presetAt(2, 0))).toBe("WORK 5:00 / REST 0:15");
+    expect(fullPresetLabel(presetAt(2, 1))).toBe("WORK 7:00 / REST 0:15");
+    expect(fullPresetLabel(presetAt(2, 2))).toBe("WORK 3:00 / REST 0:15");
+    expect(fullPresetLabel(presetAt(3, 0))).toBe("WORK 1:00 / REST 0:10");
+    expect(fullPresetLabel(presetAt(3, 1))).toBe("WORK 2:00 / REST 0:10");
+    expect(fullPresetLabel(presetAt(3, 2))).toBe("WORK 3:00 / REST 0:10");
+    expect(fullPresetLabel(presetAt(3, 3))).toBe("WORK 5:00 / REST 0:10");
+    expect(fullPresetLabel(presetAt(4, 0))).toBe("WORK 0:30 / REST 0:05");
 
     expect(compactPresetLabel(presetAt(0, 0))).toBe("5:00 / 1:00");
     expect(compactPresetLabel(presetAt(1, 0))).toBe("2:00 / 0:30");
-    expect(compactPresetLabel(presetAt(1, 1))).toBe("3:00 / 0:30");
-    expect(compactPresetLabel(presetAt(1, 2))).toBe("5:00 / 0:30");
-    expect(compactPresetLabel(presetAt(1, 3))).toBe("1:00 / 0:30");
-    expect(compactPresetLabel(presetAt(2, 0))).toBe("1:00 / 0:10");
-    expect(compactPresetLabel(presetAt(2, 1))).toBe("2:00 / 0:10");
-    expect(compactPresetLabel(presetAt(2, 2))).toBe("3:00 / 0:10");
-    expect(compactPresetLabel(presetAt(2, 3))).toBe("5:00 / 0:10");
-    expect(compactPresetLabel(presetAt(3, 0))).toBe("0:30 / 0:05");
+    expect(compactPresetLabel(presetAt(2, 0))).toBe("5:00 / 0:15");
+    expect(compactPresetLabel(presetAt(2, 1))).toBe("7:00 / 0:15");
+    expect(compactPresetLabel(presetAt(2, 2))).toBe("3:00 / 0:15");
+    expect(compactPresetLabel(presetAt(3, 0))).toBe("1:00 / 0:10");
+    expect(compactPresetLabel(presetAt(3, 3))).toBe("5:00 / 0:10");
+    expect(compactPresetLabel(presetAt(4, 0))).toBe("0:30 / 0:05");
+  });
+
+  it("keeps GI as the internal Drills identifier", () => {
+    expect(modeAt(1).id).toBe("drills");
+    expect(modeAt(1).title).toBe("GI");
+    expect(presetAt(1, 0).id).toBe("drills-2-30");
   });
 
   it("falls back to the first mode and preset for an unknown index", () => {

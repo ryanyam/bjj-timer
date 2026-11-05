@@ -20,7 +20,7 @@ import { playWorkStart } from "./audio";
 import { resetGetReadySettings, setGetReadySecondsForMode } from "./settings";
 
 /**
- * App-level checks for the Gamepad API path with the Rolls/Drills session.
+ * App-level checks for the Gamepad API path with the Rolls/GI session.
  *
  * These are simulated-input tests: they fake `navigator.getGamepads` and
  * `requestAnimationFrame` so the polling loop, the gesture recogniser and the
@@ -112,12 +112,14 @@ function phaseText(): string {
 function modeContextText(): string {
   const mode = document.querySelector(".app")?.getAttribute("data-mode");
   return mode === "drills"
-    ? "DRILLS"
-    : mode === "nogi"
-      ? "NOGI"
-      : mode === "kids"
-        ? "KIDS"
-        : "ROLLS";
+    ? "GI"
+    : mode === "adv"
+      ? "ADV"
+      : mode === "nogi"
+        ? "NOGI"
+        : mode === "kids"
+          ? "KIDS"
+          : "ROLLS";
 }
 
 function roundText(): string {
@@ -188,6 +190,7 @@ beforeEach(() => {
   resetGetReadySettings();
   setGetReadySecondsForMode("rolls", 0);
   setGetReadySecondsForMode("drills", 0);
+  setGetReadySecondsForMode("adv", 0);
   setGetReadySecondsForMode("nogi", 0);
   setGetReadySecondsForMode("kids", 0);
 
@@ -396,7 +399,7 @@ describe("the white MODE/OPTION button", () => {
     setMode(pad, false);
     frameAt(100 + MODE_BUTTON_HOLD_MS + 16);
 
-    expect(modeContextText()).toBe("DRILLS");
+    expect(modeContextText()).toBe("GI");
     expect(clockText()).toBe("2:00");
 
     setMode(pad, true);
@@ -405,8 +408,8 @@ describe("the white MODE/OPTION button", () => {
     setMode(pad, false);
     frameAt(400 + MODE_BUTTON_HOLD_MS + 16);
 
-    expect(modeContextText()).toBe("NOGI");
-    expect(clockText()).toBe("3:00");
+    expect(modeContextText()).toBe("ADV");
+    expect(clockText()).toBe("5:00");
 
     setMode(pad, true);
     frameAt(550);
@@ -414,14 +417,23 @@ describe("the white MODE/OPTION button", () => {
     setMode(pad, false);
     frameAt(550 + MODE_BUTTON_HOLD_MS + 16);
 
-    expect(modeContextText()).toBe("KIDS");
-    expect(clockText()).toBe("0:30");
+    expect(modeContextText()).toBe("NOGI");
+    expect(clockText()).toBe("3:00");
 
     setMode(pad, true);
     frameAt(700);
     frameAt(700 + MODE_BUTTON_HOLD_MS);
     setMode(pad, false);
     frameAt(700 + MODE_BUTTON_HOLD_MS + 16);
+
+    expect(modeContextText()).toBe("KIDS");
+    expect(clockText()).toBe("0:30");
+
+    setMode(pad, true);
+    frameAt(850);
+    frameAt(850 + MODE_BUTTON_HOLD_MS);
+    setMode(pad, false);
+    frameAt(850 + MODE_BUTTON_HOLD_MS + 16);
 
     expect(modeContextText()).toBe("ROLLS");
     expect(clockText()).toBe("5:00");
@@ -446,30 +458,39 @@ describe("the white MODE/OPTION button", () => {
     tapMode(pad, 400);
     expect(clockText()).toBe("3:00");
 
-    // Drills -> NOGI: its declared 3:00 default.
+    // GI -> ADV: its declared 5:00 default.
     setMode(pad, true);
     frameAt(500);
     frameAt(500 + MODE_BUTTON_HOLD_MS);
     setMode(pad, false);
     frameAt(500 + MODE_BUTTON_HOLD_MS + 16);
-    expect(modeContextText()).toBe("NOGI");
-    expect(clockText()).toBe("3:00");
+    expect(modeContextText()).toBe("ADV");
+    expect(clockText()).toBe("5:00");
 
-    // NOGI -> Kids: its first preset.
+    // ADV -> NOGI: its declared 3:00 default.
     setMode(pad, true);
     frameAt(600);
     frameAt(600 + MODE_BUTTON_HOLD_MS);
     setMode(pad, false);
     frameAt(600 + MODE_BUTTON_HOLD_MS + 16);
-    expect(modeContextText()).toBe("KIDS");
-    expect(clockText()).toBe("0:30");
+    expect(modeContextText()).toBe("NOGI");
+    expect(clockText()).toBe("3:00");
 
-    // Kids -> Rolls: its first preset again.
+    // NOGI -> Kids: its first preset.
     setMode(pad, true);
     frameAt(700);
     frameAt(700 + MODE_BUTTON_HOLD_MS);
     setMode(pad, false);
     frameAt(700 + MODE_BUTTON_HOLD_MS + 16);
+    expect(modeContextText()).toBe("KIDS");
+    expect(clockText()).toBe("0:30");
+
+    // Kids -> Rolls: its first preset again.
+    setMode(pad, true);
+    frameAt(800);
+    frameAt(800 + MODE_BUTTON_HOLD_MS);
+    setMode(pad, false);
+    frameAt(800 + MODE_BUTTON_HOLD_MS + 16);
 
     expect(modeContextText()).toBe("ROLLS");
     expect(clockText()).toBe("5:00");
@@ -557,7 +578,7 @@ describe("first controller discovery", () => {
 
     frameAt(0);
     frameAt(MODE_BUTTON_HOLD_MS);
-    expect(modeContextText()).toBe("DRILLS");
+    expect(modeContextText()).toBe("GI");
 
     setMode(pad, false);
     frameAt(MODE_BUTTON_HOLD_MS + 16);

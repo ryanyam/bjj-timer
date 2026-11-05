@@ -389,12 +389,16 @@ describe("the white MODE/OPTION button", () => {
     tapMode(pad, 100);
     expect(clockText()).toBe("3:00");
     expect(presetLabels()[0]).toBe("5:00 / 1:00");
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
+    expect(modeButton().textContent).toContain("Press: preset · Hold: mode");
 
     tapMode(pad, 200);
     expect(clockText()).toBe("5:00");
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
 
     tapMode(pad, 300);
     expect(clockText()).toBe("3:00");
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
   });
 
   it("cycles main modes on a hold and does not also change the preset", () => {
@@ -503,17 +507,28 @@ describe("the white MODE/OPTION button", () => {
     expect(clockText()).toBe("5:00");
   });
 
-  it("shows physical white pressed and hold feedback in Ready", () => {
+  it("shows pressed feedback immediately but delays hold progress", () => {
     const pad = mountWithPad();
 
     setMode(pad, true);
     frameAt(100);
 
     expect(modeButton().getAttribute("data-mode-held")).toBe("true");
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
+    expect(modeButton().textContent).toContain("PRESET");
+    expect(modeButton().textContent).toContain("Press: preset · Hold: mode");
     expect(modeButton().textContent).not.toContain("Keep holding for mode");
 
-    frameAt(100 + 50);
-    expect(modeButton().textContent).toContain("Keep holding for mode");
+    // 249 ms after down: still below the visual-feedback delay.
+    frameAt(100 + 249);
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
+
+    // 250 ms after down: progress appears, with no text or layout change.
+    frameAt(100 + 250);
+    expect(modeButton().getAttribute("style")).not.toContain(
+      "--mode-hold: 0;",
+    );
+    expect(modeButton().textContent).toContain("Press: preset · Hold: mode");
 
     frameAt(100 + MODE_BUTTON_HOLD_MS / 2);
     expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0.5");
@@ -522,14 +537,63 @@ describe("the white MODE/OPTION button", () => {
     frameAt(100 + MODE_BUTTON_HOLD_MS / 2 + 16);
 
     expect(modeButton().getAttribute("data-mode-held")).toBeNull();
-    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0");
-    expect(modeButton().textContent).toContain(
-      "Press: next preset · Hold: next mode",
-    );
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
+    expect(modeButton().textContent).toContain("Press: preset · Hold: mode");
     expect(modeContextText()).toBe("ROLLS");
   });
 
-  it("does not show mode-hold guidance when the white action is locked", () => {
+  it("does not show hold feedback on a quick physical press", () => {
+    const pad = mountWithPad();
+
+    tapMode(pad, 100);
+
+    expect(modeButton().getAttribute("data-mode-held")).toBeNull();
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
+    expect(modeButton().textContent).toContain("Press: preset · Hold: mode");
+    expect(clockText()).toBe("3:00");
+  });
+
+  it("does not flash hold feedback when released just before 250 ms", () => {
+    const pad = mountWithPad();
+
+    setMode(pad, true);
+    frameAt(100);
+    frameAt(100 + 249);
+    setMode(pad, false);
+    frameAt(100 + 250);
+
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
+    expect(modeButton().getAttribute("data-mode-held")).toBeNull();
+    expect(modeButton().textContent).toContain("Press: preset · Hold: mode");
+    expect(clockText()).toBe("3:00");
+  });
+
+  it("changes mode at 800 ms without adding the visual delay", () => {
+    const pad = mountWithPad();
+
+    setMode(pad, true);
+    frameAt(100);
+    frameAt(100 + 250);
+    expect(modeButton().getAttribute("style")).not.toContain(
+      "--mode-hold: 0;",
+    );
+
+    frameAt(100 + MODE_BUTTON_HOLD_MS);
+    setMode(pad, false);
+    frameAt(100 + MODE_BUTTON_HOLD_MS + 16);
+
+    expect(modeContextText()).toBe("GI");
+    expect(clockText()).toBe("2:00");
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
+    expect(modeButton().textContent).toContain("PRESET");
+    expect(modeButton().textContent).toContain("Press: preset · Hold: mode");
+    expect(modeButton().textContent).not.toContain("Keep holding for mode");
+
+    // Releasing after completion must not additionally change the preset.
+    expect(clockText()).toBe("2:00");
+  });
+
+  it("does not show hold feedback when the locked white action is pressed", () => {
     const pad = mountWithPad();
     tapMain(pad, 16);
 
@@ -538,7 +602,7 @@ describe("the white MODE/OPTION button", () => {
     frameAt(100 + MODE_BUTTON_HOLD_MS / 2);
 
     expect(modeButton().getAttribute("data-mode-held")).toBe("true");
-    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0");
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
     expect(modeButton().textContent).toContain("LOCKED");
     expect(modeButton().textContent).toContain(
       "Hold green to reset before changing",
@@ -552,6 +616,57 @@ describe("the white MODE/OPTION button", () => {
     expect(clockText()).toBe("5:00");
   });
 
+  it("shows no progress on a quick pointer press and preserves the short action", () => {
+    mountWithPad();
+
+    fireEvent.pointerDown(modeButton());
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
+    expect(modeButton().textContent).toContain("Press: preset · Hold: mode");
+
+    fireEvent.pointerUp(modeButton());
+
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
+    expect(modeButton().getAttribute("data-mode-held")).toBeNull();
+    expect(clockText()).toBe("3:00");
+  });
+
+  it("does not flash pointer progress when released just before 250 ms", () => {
+    mountWithPad();
+
+    fireEvent.pointerDown(modeButton());
+    act(() => {
+      vi.advanceTimersByTime(249);
+    });
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
+
+    fireEvent.pointerUp(modeButton());
+
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
+    expect(modeButton().textContent).toContain("Press: preset · Hold: mode");
+    expect(clockText()).toBe("3:00");
+  });
+
+  it("reveals pointer progress after 250 ms without changing the label", () => {
+    mountWithPad();
+
+    fireEvent.pointerDown(modeButton());
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(modeButton().getAttribute("style")).not.toContain(
+      "--mode-hold: 0;",
+    );
+    expect(modeButton().textContent).toContain("Press: preset · Hold: mode");
+    expect(modeButton().textContent).not.toContain("Keep holding for mode");
+
+    fireEvent.pointerUp(modeButton());
+  });
+
   it("cancels an in-flight pointer white hold when the session starts", () => {
     const pad = mountWithPad();
 
@@ -560,7 +675,7 @@ describe("the white MODE/OPTION button", () => {
       vi.advanceTimersByTime(400);
     });
     expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0.5");
-    expect(modeButton().textContent).toContain("Keep holding for mode");
+    expect(modeButton().textContent).toContain("Press: preset · Hold: mode");
 
     tapMain(pad, 100);
 
@@ -573,12 +688,8 @@ describe("the white MODE/OPTION button", () => {
     expect(modeButton().textContent).toContain("LOCKED");
     expect(modeButton().textContent).not.toContain("Keep holding for mode");
 
-    fireEvent.pointerUp(window);
-    expect(modeContextText()).toBe("ROLLS");
-    expect(clockText()).toBe("5:00");
-
-    // Reset unlocks selection; the cancelled gesture must not revive, and a
-    // fresh press must be required.
+    // Keep the pointer down through the reset: unlocking must not revive the
+    // cancelled gesture without a fresh press.
     downMain(pad, 2_000);
     frameAt(2_000 + MAIN_BUTTON_HOLD_MS);
     upMain(pad, 2_000 + MAIN_BUTTON_HOLD_MS + 16);
@@ -589,12 +700,32 @@ describe("the white MODE/OPTION button", () => {
     expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
     expect(modeButton().getAttribute("data-mode-held")).toBeNull();
 
+    fireEvent.pointerUp(window);
+    expect(modeContextText()).toBe("ROLLS");
+    expect(clockText()).toBe("5:00");
+
     fireEvent.pointerDown(modeButton());
     act(() => {
       vi.advanceTimersByTime(400);
     });
     expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0.5");
     fireEvent.pointerUp(window);
+  });
+
+  it("changes mode at the 800 ms pointer threshold without the visual delay", () => {
+    mountWithPad();
+
+    fireEvent.pointerDown(modeButton());
+    act(() => {
+      vi.advanceTimersByTime(800);
+    });
+
+    expect(modeContextText()).toBe("GI");
+    expect(clockText()).toBe("2:00");
+    expect(modeButton().getAttribute("style")).toContain("--mode-hold: 0;");
+
+    fireEvent.pointerUp(modeButton());
+    expect(clockText()).toBe("2:00");
   });
 
   it("clears physical white feedback on disconnect and page hiding", () => {

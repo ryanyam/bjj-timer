@@ -18,7 +18,7 @@ describe("controlCopy", () => {
       primaryLabel: "START",
       primaryHint: "Hold to reset",
       secondaryLabel: "PRESET",
-      secondaryHint: "Press: next preset · Hold: next mode",
+      secondaryHint: "Press: preset · Hold: mode",
       secondaryActive: true,
     });
   });
@@ -47,20 +47,6 @@ describe("controlCopy", () => {
     expect(controlCopy(paused(), { holding: true }).primaryHint).toBe(
       "Keep holding...",
     );
-  });
-
-  it("changes the white hint while an available mode hold is active", () => {
-    expect(controlCopy(initialRoundState, { modeHolding: true })).toMatchObject({
-      secondaryLabel: "PRESET",
-      secondaryHint: "Keep holding for mode",
-    });
-  });
-
-  it("does not show mode-hold guidance when the white action is locked", () => {
-    expect(controlCopy(started(), { modeHolding: true })).toMatchObject({
-      secondaryLabel: "LOCKED",
-      secondaryHint: "Hold green to reset before changing",
-    });
   });
 
   it("flashes RESET after the reset completes", () => {

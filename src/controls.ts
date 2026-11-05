@@ -13,8 +13,6 @@ export interface ControlCopyOptions {
   readonly holding?: boolean;
   /** The reset just completed and the button is briefly flashing RESET. */
   readonly resetFlash?: boolean;
-  /** A physical/pointer white hold is currently in progress and available. */
-  readonly modeHolding?: boolean;
 }
 
 /**
@@ -30,7 +28,6 @@ export function controlCopy(
   const getReady = state.status === "getReady";
   const holding = options.holding === true;
   const resetFlash = options.resetFlash === true;
-  const modeHolding = options.modeHolding === true;
 
   const primaryLabel = resetFlash
     ? "RESET"
@@ -51,9 +48,7 @@ export function controlCopy(
   const secondaryLabel = ready ? "PRESET" : "LOCKED";
 
   const secondaryHint = ready
-    ? modeHolding
-      ? "Keep holding for mode"
-      : "Press: next preset · Hold: next mode"
+    ? "Press: preset · Hold: mode"
     : "Hold green to reset before changing";
 
   return {

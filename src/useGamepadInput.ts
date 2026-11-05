@@ -67,7 +67,7 @@ export function useGamepadInput(options: GamepadInputOptions): GamepadInput {
     // Whole percentages are plenty for a progress bar and stop a 60 fps loop
     // from re-rendering for changes the eye cannot see.
     const mainHoldProgress = Math.round(next.mainHoldProgress * 100) / 100;
-    const modeHoldProgress = Math.round(next.modeHoldProgress * 100) / 100;
+    const modeHoldProgress = Math.round(next.modeHoldProgress * 1000) / 1000;
 
     setFeedback((previous) =>
       previous.mainPressed === next.mainPressed &&

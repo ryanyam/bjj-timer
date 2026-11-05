@@ -59,6 +59,13 @@ const NOTICE_MS = 2_200;
 /** Refresh rate for the pointer/touch hold-progress fill. */
 const POINTER_HOLD_PROGRESS_MS = 50;
 
+/**
+ * The white button's ring is intentionally hidden during the first 250 ms of a
+ * press. This is a visual delay only; the 800 ms mode-change threshold still
+ * runs from the original button-down.
+ */
+const MODE_HOLD_FEEDBACK_DELAY_MS = 250;
+
 function App() {
   const [state, dispatch] = useReducer(reduce, initialRoundState);
   const [now, setNow] = useState(() => Date.now());
@@ -323,11 +330,14 @@ function App() {
     pointerHoldProgress,
     gamepad.mainHoldProgress,
   );
-  const pointerModeProgress =
-    canSelect && !pointerModeCancelled ? modeHoldProgress : 0;
-  const effectiveModeHoldProgress = canSelect
-    ? Math.max(pointerModeProgress, gamepad.modeHoldProgress)
-    : 0;
+  const modeFeedbackProgress =
+    canSelect && !pointerModeCancelled
+      ? Math.max(modeHoldProgress, gamepad.modeHoldProgress)
+      : 0;
+  const effectiveModeHoldProgress =
+    modeFeedbackProgress >= MODE_HOLD_FEEDBACK_DELAY_MS / MODE_BUTTON_HOLD_MS
+      ? modeFeedbackProgress
+      : 0;
   const modePressed =
     (canSelect && !pointerModeCancelled && pointerModePressed) ||
     gamepad.modePressed;
@@ -335,7 +345,6 @@ function App() {
   const copy = controlCopy(state, {
     holding: mainHoldProgress > 0 && !resetFlash,
     resetFlash,
-    modeHolding: canSelect && effectiveModeHoldProgress > 0,
   });
 
   const controllerStatus =

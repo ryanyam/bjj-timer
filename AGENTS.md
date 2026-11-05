@@ -40,6 +40,22 @@ intervention.
   tests, or summaries unless I ask for them.
 - Keep resolution scaling across the three TV sizes.
 
+## Viewing-distance requirements
+
+- **Training monitoring:** students and coaches view the timer from at least
+  5 feet away while rolling or drilling.
+- **Settings operation:** instructors view the interface from less than 3 feet
+  away while using arcade buttons to change modes or presets.
+- **Long-distance priorities:** countdown readability, phase identification,
+  paused/finished state, and current round information.
+- **Close-range priorities:** mode/preset readability, arcade-navigation focus,
+  selected-value identification, and action feedback.
+- Focused and selected states must be distinguishable when they represent
+  different things.
+- Secondary settings do not need equal prominence to the countdown.
+- Five feet is the minimum stated training-viewing distance, not a verified
+  maximum.
+
 ## Product constraints
 
 - The intended finished timer has exactly two operator inputs:

@@ -8,7 +8,7 @@ sessions, with a two-button arcade control panel and a Linux desktop build.
 [Changelog](CHANGELOG.md) ·
 [Issues](https://github.com/ryanyam/bjj-timer/issues)
 
-The current package version is **0.1.0-beta.3**. This is a prerelease; use the
+The current package version is **0.1.0-beta.4**. This is a prerelease; use the
 specific prerelease asset in Releases rather than assuming `/releases/latest`
 contains the current gym-testing build. If no prerelease asset is published
 yet, build it from source using the command below.
@@ -92,8 +92,8 @@ release/BJJ-Timer-<version>-x86_64.AppImage
 To launch on Ubuntu x86-64:
 
 ```sh
-chmod +x BJJ-Timer-0.1.0-beta.3-x86_64.AppImage
-./BJJ-Timer-0.1.0-beta.3-x86_64.AppImage
+chmod +x BJJ-Timer-0.1.0-beta.4-x86_64.AppImage
+./BJJ-Timer-0.1.0-beta.4-x86_64.AppImage
 ```
 
 If AppImage execution requires FUSE 2, install the distribution's FUSE 2
@@ -122,7 +122,7 @@ The non-public `#settings` route configures Get Ready durations. See
 
 ## Project status
 
-Beta software for gym testing. The source version is `0.1.0-beta.3`; the
+Beta software for gym testing. The source version is `0.1.0-beta.4`; the
 desktop target is Linux x86-64. Automated tests, lint, and builds are not a
 substitute for checking the actual TV, audio output, or physical arcade
 buttons on the deployment machine.

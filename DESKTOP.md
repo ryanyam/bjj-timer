@@ -81,15 +81,15 @@ Keeping the profile directory preserves them for later AppImage replacements.
 The current beta artifact is:
 
 ```text
-release/BJJ-Timer-0.1.0-beta.3-x86_64.AppImage
+release/BJJ-Timer-0.1.0-beta.4-x86_64.AppImage
 ```
 
 After copying it over USB:
 
 ```sh
-sha256sum BJJ-Timer-0.1.0-beta.3-x86_64.AppImage
-chmod +x BJJ-Timer-0.1.0-beta.3-x86_64.AppImage
-./BJJ-Timer-0.1.0-beta.3-x86_64.AppImage
+sha256sum BJJ-Timer-0.1.0-beta.4-x86_64.AppImage
+chmod +x BJJ-Timer-0.1.0-beta.4-x86_64.AppImage
+./BJJ-Timer-0.1.0-beta.4-x86_64.AppImage
 ```
 
 On Ubuntu releases that lack FUSE 2, install `libfuse2` first. The app opens

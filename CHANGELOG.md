@@ -7,6 +7,24 @@ The authoritative version is the `version` field in `package.json`.
 
 No unreleased changes recorded.
 
+## [0.1.0-beta.4]
+
+### Fixed
+
+- Cancelled in-flight pointer MODE holds when selection locks, clearing hold
+  feedback and requiring a fresh press after unlocking.
+- Reconciled elapsed phase boundaries before pausing, preserving the correct
+  active phase and remaining time.
+- Cleaned up audio source and gain nodes after failed starts and made late
+  `onended` events safe.
+- Stopped any playing round bell when the session resets.
+
+### Changed
+
+- Disabled button-action sounds while retaining round-start and round-end cues.
+- Replaced the round-start and round-end audio cues with the current local WAV
+  assets.
+
 ## [0.1.0-beta.3]
 
 ### Changed

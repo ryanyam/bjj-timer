@@ -178,6 +178,23 @@ describe("audio buffer and playback lifecycle", () => {
     expect(() => bell?.onended?.()).not.toThrow();
   });
 
+  it("allows a new valid bell after explicit cleanup", async () => {
+    const audio = await import("./audio");
+    await audio.initializeAudio();
+
+    const context = FakeAudioContext.last;
+    audio.playWorkStart();
+    const first = context?.sources.at(-1);
+
+    audio.stopRoundCues();
+    audio.playRestStart();
+
+    const second = context?.sources.at(-1);
+    expect(first?.stop).toHaveBeenCalledTimes(1);
+    expect(second).not.toBe(first);
+    expect(second?.start).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps reset playback cleanup explicit and safe", async () => {
     const audio = await import("./audio");
     await audio.initializeAudio();

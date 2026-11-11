@@ -447,6 +447,13 @@ function App() {
     };
   }, [mode]);
 
+  // A selection change invalidates any bell still playing from the previous
+  // selection. This runs only after the reducer accepts a mode/preset change;
+  // blocked attempts leave the state untouched and do not stop valid audio.
+  useEffect(() => {
+    stopRoundCues();
+  }, [mode.id, presetIndex]);
+
   useEffect(() => {
     if (!resetFlash) {
       return;
@@ -500,6 +507,8 @@ function App() {
       window.removeEventListener("pointercancel", clearPointerMode);
     };
   }, [modePress, stopModeHold]);
+
+  useEffect(() => () => stopRoundCues(), []);
 
   useEffect(() => {
     const cancelPresses = () => {

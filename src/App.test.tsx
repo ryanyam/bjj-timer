@@ -27,6 +27,7 @@ import {
   playRestStart,
   playResume,
   playWorkStart,
+  stopRoundCues,
 } from "./audio";
 import { resetGetReadySettings, setGetReadySecondsForMode } from "./settings";
 
@@ -56,6 +57,7 @@ const resumeCue = vi.mocked(playResume);
 const presetCue = vi.mocked(playPresetChange);
 const resetCue = vi.mocked(playReset);
 const initAudio = vi.mocked(initializeAudio);
+const stopCues = vi.mocked(stopRoundCues);
 
 function clockText(): string {
   return screen.getByRole("timer").textContent?.trim() ?? "";
@@ -416,6 +418,114 @@ describe("audio cue mapping", () => {
     expect(restCue).toHaveBeenCalledTimes(2);
     expect(pauseCue).not.toHaveBeenCalled();
     expect(resumeCue).not.toHaveBeenCalled();
+  });
+
+  it("stops the active bell when a permitted mode change is accepted", () => {
+    render(<App />);
+    vi.clearAllMocks();
+
+    pressModeLong();
+
+    expect(modeContextText()).toBe("GI");
+    expect(stopCues).toHaveBeenCalledTimes(1);
+    expect(workCue).not.toHaveBeenCalled();
+    expect(restCue).not.toHaveBeenCalled();
+  });
+
+  it("stops the active bell when a permitted preset change is accepted", () => {
+    render(<App />);
+    vi.clearAllMocks();
+
+    selectPreset(1);
+
+    expect(activePreset().textContent?.trim()).toBe("3:00 / 1:00");
+    expect(stopCues).toHaveBeenCalledTimes(1);
+    expect(workCue).not.toHaveBeenCalled();
+    expect(restCue).not.toHaveBeenCalled();
+  });
+
+  it("does not stop valid audio when a locked mode change is rejected", () => {
+    render(<App />);
+    pressMainShort();
+    advance(1 * SECOND);
+    vi.clearAllMocks();
+
+    pressModeLong();
+
+    expect(modeContextText()).toBe("ROLLS");
+    expect(stopCues).not.toHaveBeenCalled();
+    expect(workCue).not.toHaveBeenCalled();
+    expect(restCue).not.toHaveBeenCalled();
+  });
+
+  it("does not stop valid audio for a rejected change near a phase boundary", () => {
+    render(<App />);
+    pressMainShort();
+    advance(5 * MINUTE - 2 * SECOND);
+    vi.clearAllMocks();
+
+    pressModeLong();
+    expect(modeContextText()).toBe("ROLLS");
+    expect(stopCues).not.toHaveBeenCalled();
+    expect(restCue).not.toHaveBeenCalled();
+
+    pressMainLong();
+    expect(stopCues).toHaveBeenCalledTimes(1);
+
+    selectMode("GI");
+    expect(stopCues).toHaveBeenCalledTimes(2);
+
+    pressMainShort();
+    expect(workCue).toHaveBeenCalledTimes(1);
+
+    advance(2 * MINUTE + SECOND);
+    expect(restCue).toHaveBeenCalledTimes(1);
+    expect(workCue).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps stopping clean across rapid accepted mode changes and the next round", () => {
+    render(<App />);
+    vi.clearAllMocks();
+
+    pressModeLong();
+    pressModeLong();
+    pressModeLong();
+
+    expect(modeContextText()).toBe("NOGI");
+    expect(stopCues).toHaveBeenCalledTimes(3);
+    expect(workCue).not.toHaveBeenCalled();
+
+    pressMainShort();
+    expect(workCue).toHaveBeenCalledTimes(1);
+
+    advance(3 * MINUTE + SECOND);
+    expect(restCue).toHaveBeenCalledTimes(1);
+    expect(workCue).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops an active bell on reset but not on pause or resume", () => {
+    render(<App />);
+    pressMainShort();
+    advance(1 * SECOND);
+    vi.clearAllMocks();
+
+    pressMainShort();
+    pressMainShort();
+    expect(stopCues).not.toHaveBeenCalled();
+
+    pressMainLong();
+    expect(stopCues).toHaveBeenCalledTimes(1);
+    expect(workCue).not.toHaveBeenCalled();
+    expect(restCue).not.toHaveBeenCalled();
+  });
+
+  it("stops active audio on component teardown", () => {
+    const view = render(<App />);
+    vi.clearAllMocks();
+
+    view.unmount();
+
+    expect(stopCues).toHaveBeenCalledTimes(1);
   });
 
   it("shows a warning and keeps the timer working when audio load fails", async () => {

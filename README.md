@@ -13,7 +13,7 @@ fullscreen Electron app for Linux.
 _1920×1080 Ready screen captured from the Electron renderer. This is a
 development capture, not an Ubuntu, TV, or physical-controller validation._
 
-The current source/package version is **0.1.0-beta.5**. A beta.5 Linux x86-64
+The current source/package version is **0.1.0-beta.6**. A beta.6 Linux x86-64
 AppImage has been prepared locally for gym testing; publication of a GitHub
 release is not verified in this repository. Use the [Releases
 page](https://github.com/ryanyam/bjj-timer/releases) for published downloads.
@@ -81,15 +81,15 @@ Download the current prerelease from
 source. The locally built beta.4 file has this verified checksum:
 
 ```text
-a7e6bffe07fc568c8573afee50a9d6d55e8b121eb1874210729802c529b4614d
+d0d9466b0cb2671a5ef0fb621f440e8b1f13839145d7e79b3fef4471f1227744
 ```
 
 To verify and launch on Ubuntu x86-64:
 
 ```sh
-sha256sum BJJ-Timer-0.1.0-beta.5-x86_64.AppImage
-chmod +x BJJ-Timer-0.1.0-beta.5-x86_64.AppImage
-./BJJ-Timer-0.1.0-beta.5-x86_64.AppImage
+sha256sum BJJ-Timer-0.1.0-beta.6-x86_64.AppImage
+chmod +x BJJ-Timer-0.1.0-beta.6-x86_64.AppImage
+./BJJ-Timer-0.1.0-beta.6-x86_64.AppImage
 ```
 
 The checksum above applies to the locally prepared artifact, not to a

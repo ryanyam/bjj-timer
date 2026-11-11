@@ -7,6 +7,16 @@ The authoritative version is the `version` field in `package.json`.
 
 No unreleased changes recorded.
 
+## [0.1.0-beta.6]
+
+### Fixed
+
+- Stopped active round-start and round-end cues when an accepted mode or preset
+  change invalidates the previous selection.
+- Added round-cue cleanup on component teardown.
+- Preserved subsequent valid round cues after a selection change; rejected
+  changes do not stop valid audio.
+
 ## [0.1.0-beta.5]
 
 ### Changed

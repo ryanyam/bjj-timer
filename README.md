@@ -76,29 +76,19 @@ a non-blocking warning; the timer continues.
 
 ## Ubuntu / AppImage
 
-Download the current prerelease from
-[Releases](https://github.com/ryanyam/bjj-timer/releases), or build it from
-source. The locally built beta.4 file has this verified checksum:
+The packaged Linux target is a **Linux x86-64 AppImage** for the Ubuntu Intel
+Acer Chromebox. Download a release from
+[Releases](https://github.com/ryanyam/bjj-timer/releases). The installed timer
+uses the stable path:
 
 ```text
-d0d9466b0cb2671a5ef0fb621f440e8b1f13839145d7e79b3fef4471f1227744
+$HOME/Applications/BJJ-Timer.AppImage
 ```
 
-To verify and launch on Ubuntu x86-64:
-
-```sh
-sha256sum BJJ-Timer-0.1.0-beta.6-x86_64.AppImage
-chmod +x BJJ-Timer-0.1.0-beta.6-x86_64.AppImage
-./BJJ-Timer-0.1.0-beta.6-x86_64.AppImage
-```
-
-The checksum above applies to the locally prepared artifact, not to a
-GitHub-hosted file unless the published asset matches it. If AppImage execution
-needs FUSE 2, install the distribution's compatibility package first (for
-example `libfuse2` on Ubuntu 22.04+). Kiosk mode exits with **Ctrl+Shift+Q**.
-
-See [DESKTOP.md](DESKTOP.md) for USB transfer, kiosk, offline, and maintenance
-details rather than duplicating the full deployment guide here.
+See [DESKTOP.md](DESKTOP.md) for the single authoritative first-install,
+FUSE/prerequisite, automatic-login, desktop startup, user-service,
+crash-recovery, update, rollback, and troubleshooting guide. Do not follow a
+second direct-AppImage autostart recipe.
 
 ## Development
 
